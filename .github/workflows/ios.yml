@@ -15,16 +15,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       - name: Build web (Vite)
         run: npm run build
-
-      - name: Instalar Capacitor CLI
-        run: npm install -g @capacitor/cli
 
       - name: Sync Capacitor
         run: npx cap sync ios
@@ -87,7 +84,7 @@ jobs:
                 <key>metadata</key>
                 <dict>
                   <key>bundle-identifier</key>
-                  <string>com.dmar.mobile</string>
+                  <string>com.dmar.asistente</string>
                   <key>bundle-version</key>
                   <string>1.0</string>
                   <key>kind</key>
