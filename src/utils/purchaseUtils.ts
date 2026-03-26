@@ -15,7 +15,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
       }
     : null;
 }
-import type { PurchaseItemForm, SizeSelection } from '../types/Purchase';
+import type { PurchaseItemForm } from '../types/Purchase';
 
 /**
  * Calcula la distancia entre dos colores en RGB
