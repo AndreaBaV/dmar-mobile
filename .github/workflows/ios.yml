@@ -26,12 +26,20 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
+      - name: Reempacar p12 con algoritmo compatible
+        run: |
+          cd ios/certs
+          openssl pkcs12 -in distribution.p12 -out cert_temp.pem -passin pass:Pronto40 -passout pass:Pronto40 -legacy || \
+          openssl pkcs12 -in distribution.p12 -out cert_temp.pem -passin pass:Pronto40 -passout pass:Pronto40
+          openssl pkcs12 -export -in cert_temp.pem -out distribution_mac.p12 -passin pass:Pronto40 -passout pass:Pronto40
+          rm cert_temp.pem
+
       - name: Instalar certificado y provisioning profile
         run: |
           security create-keychain -p "temp123" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "temp123" build.keychain
-          security import ios/certs/distribution.p12 -k build.keychain -P "Pronto40" -T /usr/bin/codesign -T /usr/bin/security
+          security import ios/certs/distribution_mac.p12 -k build.keychain -P "Pronto40" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temp123" build.keychain
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
