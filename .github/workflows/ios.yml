@@ -41,9 +41,7 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p "temp123" build.keychain
           security list-keychains -s build.keychain
-
-          security import cert.p12 -k build.keychain -P "Pronto40" -T /usr/bin/codesign -T /usr/bin/security          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temp123" build.keychain
-
+          security import cert.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
