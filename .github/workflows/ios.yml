@@ -45,6 +45,10 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp ios/certs/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
+      - name: Instalar CocoaPods
+        run: |
+          cd ios/App
+          pod install
       - name: Build IPA
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
