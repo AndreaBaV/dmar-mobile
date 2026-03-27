@@ -87,7 +87,7 @@ jobs:
                 <key>metadata</key>
                 <dict>
                   <key>bundle-identifier</key>
-                  <string>com.dmar.asistente</string>
+                  <string>com.dmartiendaderopa.mobile</string>                  
                   <key>bundle-version</key>
                   <string>1.0</string>
                   <key>kind</key>

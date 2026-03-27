@@ -8,10 +8,5 @@
   <string>Z6WHV5G6M3</string>
   <key>compileBitcode</key>
   <false/>
-  <key>provisioningProfiles</key>
-  <dict>
-    <key>com.dmar.asistente</key>
-    <string>dmar-mobile-adhoc</string>
-  </dict>
 </dict>
 </plist>
