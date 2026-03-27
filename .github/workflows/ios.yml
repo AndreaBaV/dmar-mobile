@@ -10,6 +10,8 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      RELEASE_TAG: ios-${{ github.sha }}
 
     steps:
       - name: Checkout código
@@ -85,7 +87,7 @@ jobs:
                     <key>kind</key>
                     <string>software-package</string>
                     <key>url</key>
-                    <string>https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/${APP_NAME}.ipa</string>
+                    <string>https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${APP_NAME}.ipa</string>
                   </dict>
                 </array>
                 <key>metadata</key>
@@ -110,7 +112,7 @@ jobs:
           <body style="font-family:sans-serif;text-align:center;padding:40px">
             <h2>D'Mar POS</h2>
             <p>Versión: ${{ github.sha }}</p>
-            <a href="itms-services://?action=download-manifest&url=https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/manifest.plist"
+            <a href="itms-services://?action=download-manifest&url=https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/manifest.plist"
                style="background:#007AFF;color:white;padding:15px 30px;border-radius:10px;text-decoration:none;font-size:18px">
               Instalar en iPhone
             </a>
@@ -121,8 +123,8 @@ jobs:
       - name: Publicar Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.sha }}
-          name: "Build ${{ github.sha }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Build ${{ env.RELEASE_TAG }}"
           files: |
             build/ipa/*.ipa
             manifest.plist
