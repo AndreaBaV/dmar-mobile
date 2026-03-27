@@ -3,7 +3,16 @@
 <plist version="1.0">
 <dict>
   <key>method</key>
-  <string>ad-hoc</string>
+  <string>release-testing</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>signingCertificate</key>
+  <string>Apple Distribution</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.dmartiendaderopa.mobile</key>
+    <string>dmar-mobile-adhoc</string>
+  </dict>
   <key>teamID</key>
   <string>Z6WHV5G6M3</string>
   <key>compileBitcode</key>
