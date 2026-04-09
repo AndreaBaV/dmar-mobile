@@ -1,15 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { openDebugConsole } from '../lib/debugConsole';
+import { dlog, getLogEntries, subscribeLog } from '../lib/dlog';
 import './LoginView.scss';
 
-/**
- * En iOS/WKWebView a veces signInWithEmailAndPassword no resuelve la promesa aunque el login sea correcto.
- * Esperamos también a que onAuthStateChanged notifique al usuario (misma cuenta).
- */
-const LOGIN_TIMEOUT_MS = 90_000;
+const LOGIN_TIMEOUT_MS = 15_000;
 
 const EyeIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -30,6 +27,22 @@ type Props = {
   onSignInFailed?: () => void;
 };
 
+function DebugPanel() {
+  const [, setTick] = useState(0);
+  useEffect(() => subscribeLog(() => setTick((n) => n + 1)), []);
+  const entries = getLogEntries();
+  if (entries.length === 0) return null;
+  return (
+    <pre className="login-debug-panel">
+      {entries.map((e) => {
+        const ts = new Date(e.t).toLocaleTimeString();
+        const d = e.data ? ' ' + JSON.stringify(e.data) : '';
+        return `${ts} [${e.h}] ${e.msg}${d}\n`;
+      }).join('')}
+    </pre>
+  );
+}
+
 export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,13 +50,17 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     const emailTrim = email.trim();
     const emailNorm = emailTrim.toLowerCase();
+
+    // #region agent log
+    dlog('H1', 'LoginView handleSubmit INICIO', { emailNorm, timeoutMs: LOGIN_TIMEOUT_MS });
+    // #endregion
 
     let waitUnsub: (() => void) | undefined;
     let waitTimer: ReturnType<typeof window.setTimeout> | undefined;
@@ -57,16 +74,32 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
       waitUnsub = undefined;
     };
 
-    /** Listener de respaldo: mismo email que el formulario (evita promesa de signIn colgada). */
     const userAppeared = new Promise<User>((resolve, reject) => {
       waitTimer = window.setTimeout(() => {
+        // #region agent log
+        dlog('H5', 'LoginView onAuthStateChanged TIMEOUT disparó', { ms: LOGIN_TIMEOUT_MS });
+        // #endregion
         cleanupExtraListener();
         reject(new Error('LOGIN_TIMEOUT'));
       }, LOGIN_TIMEOUT_MS);
 
+      // #region agent log
+      dlog('H2', 'LoginView: registrando onAuthStateChanged listener');
+      // #endregion
       waitUnsub = onAuthStateChanged(auth, (user) => {
+        // #region agent log
+        dlog('H2', 'LoginView onAuthStateChanged DISPARO', {
+          hasUser: !!user,
+          userEmail: user?.email ?? null,
+          expectedEmail: emailNorm,
+          match: user?.email?.toLowerCase() === emailNorm,
+        });
+        // #endregion
         if (!user?.email) return;
         if (user.email.toLowerCase() !== emailNorm) return;
+        // #region agent log
+        dlog('H2', 'LoginView onAuthStateChanged: MATCH → resolve', { uid: user.uid });
+        // #endregion
         window.clearTimeout(waitTimer);
         waitTimer = undefined;
         waitUnsub?.();
@@ -76,51 +109,81 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
     });
 
     onBeforeSignIn();
+    // #region agent log
+    dlog('H3', 'LoginView: onBeforeSignIn() llamado (pendingLoginRenew=true)');
+    // #endregion
 
     try {
-      const signInPromise = signInWithEmailAndPassword(auth, emailTrim, password);
+      // #region agent log
+      dlog('H1', 'LoginView: ANTES signInWithEmailAndPassword');
+      // #endregion
+
+      const signInPromise = signInWithEmailAndPassword(auth, emailTrim, password)
+        .then((cred) => {
+          // #region agent log
+          dlog('H1', 'LoginView: signInWithEmailAndPassword RESOLVIÓ', { uid: cred.user.uid, email: cred.user.email });
+          // #endregion
+          return cred;
+        })
+        .catch((err: unknown) => {
+          // #region agent log
+          const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : 'unknown';
+          dlog('H1', 'LoginView: signInWithEmailAndPassword RECHAZÓ', { code, msg: String(err) });
+          // #endregion
+          throw err;
+        });
+
+      // #region agent log
+      dlog('H1', 'LoginView: ANTES Promise.race([signIn, userAppeared])');
+      // #endregion
+
       await Promise.race([signInPromise, userAppeared]);
-      console.log('[DMAR:auth] Login OK (signIn y/o onAuthStateChanged)');
+
+      // #region agent log
+      dlog('H1', 'LoginView: Promise.race RESOLVIÓ OK');
+      // #endregion
     } catch (err: unknown) {
       cleanupExtraListener();
       onSignInFailed?.();
 
+      // #region agent log
+      const errMsg = err instanceof Error ? err.message : String(err);
+      dlog('H1', 'LoginView: Promise.race RECHAZÓ', { errMsg });
+      // #endregion
+
       if (err instanceof Error && err.message === 'LOGIN_TIMEOUT') {
-        setError('La petición tardó demasiado. Revise la red o intente de nuevo. Use “Ver logs” abajo si sigue fallando.');
-        console.error('[DMAR:auth] login timeout', LOGIN_TIMEOUT_MS, 'ms');
+        setError('La petición tardó demasiado. Vea los logs abajo.');
       } else {
         const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : '';
-        const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : '';
         if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
           setError('Usuario o contraseña incorrectos.');
         } else if (code === 'auth/too-many-requests') {
           setError('Demasiados intentos. Espere un momento.');
         } else if (code === 'auth/network-request-failed') {
-          setError('Sin conexión o bloqueo de red. Compruebe Wi‑Fi/datos.');
+          setError('Sin conexión o bloqueo de red.');
         } else {
-          setError('No se pudo iniciar sesión. Toque “Ver logs” para detalles.');
+          setError(`Error: ${err instanceof Error ? err.message : String(err)}`);
         }
-        console.error('[DMAR:auth] signIn error', code, msg, err);
       }
     } finally {
       cleanupExtraListener();
       setLoading(false);
     }
-  };
+  }, [email, password, onBeforeSignIn, onSignInFailed]);
 
   return (
     <div className="login-view">
       <div className="login-card glass-panel">
         <h1 className="login-title">D&apos;MAR POS</h1>
-        <p className="login-sub">Inicie sesión (válido 7 días en este dispositivo)</p>
-        <form onSubmit={(e) => void handleSubmit(e)} className="login-form">
+        <p className="login-sub">Inicie sesión (válido 7 días)</p>
+        <form onSubmit={(ev) => void handleSubmit(ev)} className="login-form">
           <label className="login-label">
             Correo
             <input
               type="email"
               autoComplete="username"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(ev) => setEmail(ev.target.value)}
               className="login-input"
               required
             />
@@ -132,7 +195,7 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(ev) => setPassword(ev.target.value)}
                 className="login-input login-input--with-toggle"
                 required
               />
@@ -154,6 +217,7 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
         <button type="button" className="login-logs-link" onClick={() => void openDebugConsole()}>
           Ver logs (depuración)
         </button>
+        <DebugPanel />
       </div>
     </div>
   );

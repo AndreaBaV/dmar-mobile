@@ -124,6 +124,22 @@
   cursor: not-allowed;
 }
 
+.login-debug-panel {
+  margin: 14px 0 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #a5f3fc;
+  font-family: 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 260px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .login-logs-link {
   display: block;
   width: 100%;
