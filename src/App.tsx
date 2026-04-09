@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { browserLocalPersistence, onAuthStateChanged, setPersistence, signOut } from 'firebase/auth';
 import { SpeechRecognition as CapacitorSpeechRecognition } from '@capacitor-community/speech-recognition';
 import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
@@ -67,30 +67,76 @@ function App() {
   const [procesandoVenta, setProcesandoVenta] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setAuthUser(null);
-        setAuthChecked(true);
-        return;
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+    let initialAuthHandled = false;
+
+    const bootTimeoutId = window.setTimeout(() => {
+      if (cancelled || initialAuthHandled) return;
+      console.warn('[DMAR:auth] Firebase Auth no respondió a tiempo (iOS/WKWebView); se muestra login.');
+      initialAuthHandled = true;
+      setAuthUser(null);
+      setAuthChecked(true);
+    }, 4500);
+
+    const finishBoot = () => {
+      if (initialAuthHandled) return;
+      initialAuthHandled = true;
+      window.clearTimeout(bootTimeoutId);
+    };
+
+    const safeSignOut = async () => {
+      await Promise.race([
+        signOut(auth),
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            console.warn('[DMAR:auth] signOut tardó demasiado; se continúa.');
+            resolve();
+          }, 12000);
+        }),
+      ]);
+    };
+
+    void (async () => {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        console.warn('[DMAR:auth] setPersistence:', e);
       }
-      if (!isWeeklySessionValid()) {
-        if (pendingLoginRenew.current) {
-          pendingLoginRenew.current = false;
-          renewWeeklySession();
-          setAuthUser(user);
+      if (cancelled) return;
+
+      unsub = onAuthStateChanged(auth, async (user) => {
+        finishBoot();
+
+        if (!user) {
+          setAuthUser(null);
           setAuthChecked(true);
           return;
         }
-        await signOut(auth);
-        clearWeeklySession();
-        setAuthUser(null);
+        if (!isWeeklySessionValid()) {
+          if (pendingLoginRenew.current) {
+            pendingLoginRenew.current = false;
+            renewWeeklySession();
+            setAuthUser(user);
+            setAuthChecked(true);
+            return;
+          }
+          await safeSignOut();
+          clearWeeklySession();
+          setAuthUser(null);
+          setAuthChecked(true);
+          return;
+        }
+        setAuthUser(user);
         setAuthChecked(true);
-        return;
-      }
-      setAuthUser(user);
-      setAuthChecked(true);
-    });
-    return () => unsub();
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(bootTimeoutId);
+      unsub?.();
+    };
   }, []);
 
   useEffect(() => {
