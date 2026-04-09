@@ -49,6 +49,13 @@ export const db = initializeFirestore(app, {
   }),
 });
 
+if (typeof console !== 'undefined' && console.log) {
+  console.log('[DMAR:init] Firebase listo', {
+    projectId: firebaseConfig.projectId,
+    onLine: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
+  });
+}
+
 // Utilidades para gestión de red
 export const goOffline = async () => { 
   await disableNetwork(db);

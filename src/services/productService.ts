@@ -35,36 +35,56 @@ export class ProductService {
   private static CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
   static async loadAllProducts(forceRefresh = false): Promise<Product[]> {
+    const tRoot = performance.now();
+    const log = (msg: string, extra?: unknown) =>
+      console.log(`[DMAR:init] ProductService.loadAllProducts +${(performance.now() - tRoot).toFixed(0)}ms`, msg, extra ?? '');
+
     try {
       // Si está offline, no forzar refresh - usar cache o datos offline
       const isOnline = navigator.onLine;
+      log('entrada', { forceRefresh, isOnline, hasServiceCache: !!this.productsCache });
+
       if (!isOnline && forceRefresh) {
-        console.log('Sin conexión, usando cache de productos');
+        log('offline: se ignora forceRefresh, se intentará cache del servicio');
         forceRefresh = false;
       }
       
       if (!forceRefresh && this.productsCache && 
           Date.now() - this.cacheTimestamp < this.CACHE_DURATION) {
-        console.log('Usando productos desde cache');
+        log('retorno cache ProductService', { count: this.productsCache.length });
         return this.productsCache;
       }
 
-      console.log(isOnline ? 'Cargando productos desde Firebase' : 'Cargando productos desde cache offline');
+      log('inicio fetch Firestore products', { isOnline });
       const startTime = performance.now();
 
       const productsCollection = collection(db, 'products');
+      log('await getDocs(products)…');
       const snapshot = await getDocs(productsCollection);
+      log('getDocs(products) OK', {
+        docs: snapshot.size,
+        ms: (performance.now() - startTime).toFixed(0),
+      });
 
       // Cargar todos los productos con sus variantes EN PARALELO
-      const productPromises = snapshot.docs.map(async (doc) => {
-        const data = { id: doc.id, ...doc.data() } as FirebaseProduct;
+      const totalDocs = snapshot.docs.length;
+      const productPromises = snapshot.docs.map(async (docSnap, idx) => {
+        const docId = docSnap.id;
+        const tProd = performance.now();
+        log(`producto [${idx + 1}/${totalDocs}] inicio`, { id: docId });
+        const data = { id: docSnap.id, ...docSnap.data() } as FirebaseProduct;
         
         // Cargar variantes desde subcolecciones
-        const variants = await this.loadVariantsFromSubcollections(doc.id);
+        const variants = await this.loadVariantsFromSubcollections(docId);
+        log(`producto [${idx + 1}/${totalDocs}] fin`, {
+          id: docId,
+          variants: variants.length,
+          ms: (performance.now() - tProd).toFixed(0),
+        });
         
         // Calcular precio desde variantes (precio más bajo o único)
         const calculatedPrice = getDisplayPrice({
-          id: doc.id,
+          id: docSnap.id,
           name: data.name || 'Sin nombre',
           price: 0, // Temporal, se calculará
           category: data.category || 'Sin Categoría',
@@ -76,7 +96,7 @@ export class ProductService {
         }) || data.price || data.minPrice || 0;
         
         return {
-          id: doc.id,
+          id: docSnap.id,
           name: data.name || 'Sin nombre',
           price: calculatedPrice,
           category: data.category || 'Sin Categoría',
@@ -91,20 +111,22 @@ export class ProductService {
         } as Product;
       });
 
+      log('await Promise.all(productPromises)…', { productos: totalDocs });
       const allProducts = await Promise.all(productPromises);
+      log('Promise.all productos OK', { count: allProducts.length });
       
       this.productsCache = allProducts;
       this.cacheTimestamp = Date.now();
 
       const loadTime = (performance.now() - startTime).toFixed(2);
-      console.log(`${allProducts.length} productos cargados en ${loadTime}ms`);
+      log('loadAllProducts completo', { productos: allProducts.length, ms: loadTime });
       
       return allProducts;
       
     } catch (error) {
-      console.error('Error cargando productos:', error);
+      console.error('[DMAR:init] Error cargando productos:', error);
       if (this.productsCache) {
-        console.log('Usando cache por error de red');
+        log('fallback a cache ProductService tras error', { count: this.productsCache.length });
         return this.productsCache;
       }
       throw new Error('No se pudieron cargar los productos');
@@ -113,19 +135,36 @@ export class ProductService {
 
   // Cargar variantes desde: products/{id}/variants/{variantId}/sizes/{sizeId}
   private static async loadVariantsFromSubcollections(productId: string): Promise<Variant[]> {
+    const tVar = performance.now();
+    const vlog = (msg: string, extra?: unknown) =>
+      console.log(
+        `[DMAR:init] loadVariants ${productId} +${(performance.now() - tVar).toFixed(0)}ms`,
+        msg,
+        extra ?? ''
+      );
+
     try {
       const variantsCol = collection(db, 'products', productId, 'variants');
+      vlog('await getDocs(variants)…');
       const variantsSnap = await getDocs(variantsCol);
+      vlog('getDocs(variants) OK', { variantDocs: variantsSnap.size });
 
       // Cargar todas las variantes y sus sizes EN PARALELO
-      const variantPromises = variantsSnap.docs.map(async (variantDoc) => {
+      const variantPromises = variantsSnap.docs.map(async (variantDoc, vidx) => {
         const variantData = variantDoc.data();
         const colorName = String(variantData.color || variantData.Color || 'Sin color').trim();
         const colorCode = variantData.colorCode || variantData.hex || variantData.color_hex;
 
         // Cargar sizes de esta variante
         const sizesCol = collection(db, 'products', productId, 'variants', variantDoc.id, 'sizes');
+        vlog(`variante [${vidx + 1}/${variantsSnap.docs.length}] await getDocs(sizes)…`, {
+          variantId: variantDoc.id,
+        });
         const sizesSnap = await getDocs(sizesCol);
+        vlog(`variante [${vidx + 1}/${variantsSnap.docs.length}] getDocs(sizes) OK`, {
+          variantId: variantDoc.id,
+          sizeDocs: sizesSnap.size,
+        });
 
         return sizesSnap.docs.map((sizeDoc) => {
           const sizeData = sizeDoc.data();
@@ -157,8 +196,10 @@ export class ProductService {
         });
       });
 
+      vlog('await Promise.all(variantPromises)…', { variantes: variantsSnap.docs.length });
       const variantArrays = await Promise.all(variantPromises);
       const allVariants = variantArrays.flat();
+      vlog('variantes listas', { flatCount: allVariants.length, totalMs: (performance.now() - tVar).toFixed(0) });
 
       // Si no hay variantes, crear una por defecto
       return allVariants.length > 0 ? allVariants : [{
@@ -169,7 +210,7 @@ export class ProductService {
       } as Variant];
 
     } catch (error) {
-      console.error(`Error cargando variantes de ${productId}:`, error);
+      console.error(`[DMAR:init] Error cargando variantes de ${productId}:`, error);
       return [{
         color: 'Único',
         size: 'Única',

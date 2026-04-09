@@ -23,22 +23,25 @@ export class InventoryMatcher {
 
   // Carga productos reales (caché de 5 minutos)
   static async loadCatalog() {
+    const t0 = performance.now();
+    const log = (msg: string, extra?: unknown) =>
+      console.log(`[DMAR:init] InventoryMatcher.loadCatalog +${(performance.now() - t0).toFixed(0)}ms`, msg, extra ?? '');
+
     const now = Date.now();
     // Si ya tenemos datos y son recientes (menos de 5 min), no descargamos de nuevo
     if (this.productsCache.length > 0 && (now - this.lastFetch) < 300000) {
-      console.log("🔄 Mar: Usando catálogo en caché.");
+      log('usando caché en memoria', { productos: this.productsCache.length, ageMs: now - this.lastFetch });
       return this.productsCache;
     }
-    
-    console.log("🔄 Mar: Descargando catálogo COMPLETO de Firebase...");
+
+    log('descarga nueva: antes ProductService.loadAllProducts(true)');
     // IMPORTANTE: loadAllProducts debe traer las variantes y sus tallas
     this.productsCache = await ProductService.loadAllProducts(true);
     this.lastFetch = now;
+    log('descarga nueva: después ProductService.loadAllProducts', { count: this.productsCache.length });
     
-    // DEBUG: Ver qué se cargó realmente
-    console.log(`✅ Mar: Catálogo cargado (${this.productsCache.length} productos).`);
     if (this.productsCache.length > 0) {
-       console.log("🔍 Ejemplo de producto cargado:", this.productsCache[0]);
+      log('ejemplo primer producto', { id: this.productsCache[0].id, name: this.productsCache[0].name });
     }
     
     return this.productsCache;

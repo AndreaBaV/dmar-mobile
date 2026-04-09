@@ -37,13 +37,24 @@ function App() {
 
   useEffect(() => {
     const cargarDatos = async () => {
+      const t0 = performance.now();
+      const log = (step: string, extra?: Record<string, unknown>) => {
+        const ms = (performance.now() - t0).toFixed(0);
+        console.log(`[DMAR:init] App.cargarDatos +${ms}ms`, step, extra ?? '');
+      };
+      log('inicio', { onLine: navigator.onLine, href: typeof window !== 'undefined' ? window.location.href : '' });
       try {
+        log('antes InventoryMatcher.loadCatalog()');
         await InventoryMatcher.loadCatalog();
+        log('después InventoryMatcher.loadCatalog() OK');
         setCatalogoListo(true);
         setMensaje("Sistema listo. Pulse para iniciar.");
       } catch (error) {
-        console.error(error);
+        const err = error as Error;
+        console.error('[DMAR:init] cargarDatos ERROR', err?.message, err?.stack, error);
         setMensaje("Error de conexión con el inventario.");
+      } finally {
+        log('fin cargarDatos', { totalMs: (performance.now() - t0).toFixed(0) });
       }
     };
     cargarDatos();
