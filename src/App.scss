@@ -118,6 +118,7 @@ body {
 .tab-bar__btn {
   flex: 1;
   max-width: 120px;
+  min-height: 44px;
   padding: 10px 8px;
   border: none;
   border-radius: 12px;
@@ -127,6 +128,7 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
+  touch-action: manipulation;
   transition: background 0.2s, color 0.2s;
 
   &.active {
@@ -264,11 +266,12 @@ body {
     border-radius: 50%;
     border: none;
     background: linear-gradient(145deg, #ffffff, #f0f9ff);
-    box-shadow: 
-      5px 5px 10px #d1d9e6, 
+    box-shadow:
+      5px 5px 10px #d1d9e6,
       -5px -5px 10px #ffffff; // Neumorphism sutil
     color: var(--primary-blue);
     cursor: pointer;
+    touch-action: manipulation;
     transition: all 0.3s ease;
     display: flex;
     align-items: center;

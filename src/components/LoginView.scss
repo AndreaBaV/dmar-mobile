@@ -55,7 +55,8 @@
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  font-size: 1rem;
+  /* 16px mínimo: iOS no hace zoom automático al focus */
+  font-size: 16px;
   font-family: inherit;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text-main, #1e293b);
@@ -81,6 +82,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   padding: 6px;
   border: none;
   border-radius: 8px;
@@ -88,6 +91,7 @@
   color: var(--text-secondary, #64748b);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 
   &:active {
     color: var(--primary-dark, #0284c7);
@@ -106,10 +110,11 @@
   padding: 14px;
   border: none;
   border-radius: 12px;
-  font-size: 1rem;
+  font-size: 16px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+  touch-action: manipulation;
   background: linear-gradient(135deg, var(--primary-blue, #0ea5e9), var(--primary-dark, #0284c7));
   color: white;
 }
@@ -123,14 +128,16 @@
   display: block;
   width: 100%;
   margin-top: 18px;
-  padding: 10px;
+  padding: 12px;
   border: none;
   background: none;
   font-family: inherit;
-  font-size: 0.8rem;
+  /* 16px evita zoom al tocar el enlace en iOS */
+  font-size: 16px;
   font-weight: 600;
   color: var(--primary-dark, #0284c7);
   text-decoration: underline;
   cursor: pointer;
   text-align: center;
+  touch-action: manipulation;
 }

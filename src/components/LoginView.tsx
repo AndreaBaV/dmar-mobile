@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { openDebugConsole } from '../lib/debugConsole';
 import './LoginView.scss';
 
-const LOGIN_TIMEOUT_MS = 28_000;
+/**
+ * En iOS/WKWebView a veces signInWithEmailAndPassword no resuelve la promesa aunque el login sea correcto.
+ * Esperamos también a que onAuthStateChanged notifique al usuario (misma cuenta).
+ */
+const LOGIN_TIMEOUT_MS = 90_000;
 
 const EyeIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -22,27 +27,8 @@ const EyeOffIcon = () => (
 
 type Props = {
   onBeforeSignIn: () => void;
-  /** Si el login falla o hace timeout, limpiar flags en el padre (p. ej. pendingLoginRenew). */
   onSignInFailed?: () => void;
 };
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = window.setTimeout(() => {
-      reject(new Error('LOGIN_TIMEOUT'));
-    }, ms);
-    promise.then(
-      (v) => {
-        window.clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        window.clearTimeout(t);
-        reject(e);
-      }
-    );
-  });
-}
 
 export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
   const [email, setEmail] = useState('');
@@ -55,17 +41,53 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    const emailTrim = email.trim();
+    const emailNorm = emailTrim.toLowerCase();
+
+    let waitUnsub: (() => void) | undefined;
+    let waitTimer: ReturnType<typeof window.setTimeout> | undefined;
+
+    const cleanupExtraListener = () => {
+      if (waitTimer !== undefined) {
+        window.clearTimeout(waitTimer);
+        waitTimer = undefined;
+      }
+      waitUnsub?.();
+      waitUnsub = undefined;
+    };
+
+    /** Listener de respaldo: mismo email que el formulario (evita promesa de signIn colgada). */
+    const userAppeared = new Promise<User>((resolve, reject) => {
+      waitTimer = window.setTimeout(() => {
+        cleanupExtraListener();
+        reject(new Error('LOGIN_TIMEOUT'));
+      }, LOGIN_TIMEOUT_MS);
+
+      waitUnsub = onAuthStateChanged(auth, (user) => {
+        if (!user?.email) return;
+        if (user.email.toLowerCase() !== emailNorm) return;
+        window.clearTimeout(waitTimer);
+        waitTimer = undefined;
+        waitUnsub?.();
+        waitUnsub = undefined;
+        resolve(user);
+      });
+    });
+
     onBeforeSignIn();
+
     try {
-      await withTimeout(
-        signInWithEmailAndPassword(auth, email.trim(), password),
-        LOGIN_TIMEOUT_MS
-      );
+      const signInPromise = signInWithEmailAndPassword(auth, emailTrim, password);
+      await Promise.race([signInPromise, userAppeared]);
+      console.log('[DMAR:auth] Login OK (signIn y/o onAuthStateChanged)');
     } catch (err: unknown) {
+      cleanupExtraListener();
       onSignInFailed?.();
+
       if (err instanceof Error && err.message === 'LOGIN_TIMEOUT') {
         setError('La petición tardó demasiado. Revise la red o intente de nuevo. Use “Ver logs” abajo si sigue fallando.');
-        console.error('[DMAR:auth] signIn timeout', LOGIN_TIMEOUT_MS, 'ms');
+        console.error('[DMAR:auth] login timeout', LOGIN_TIMEOUT_MS, 'ms');
       } else {
         const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : '';
         const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : '';
@@ -81,6 +103,7 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
         console.error('[DMAR:auth] signIn error', code, msg, err);
       }
     } finally {
+      cleanupExtraListener();
       setLoading(false);
     }
   };

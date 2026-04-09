@@ -1,6 +1,8 @@
 /* Base neutra: el tema real vive en App.scss (POS). Evita centrar #root en una esquina. */
 html {
   height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -8,6 +10,15 @@ body {
   min-width: 320px;
   min-height: 100%;
   min-height: 100dvh;
+  /* Menos zoom por doble toque (iOS/Safari) al pulsar botones pequeños */
+  touch-action: manipulation;
+}
+
+/* iOS hace zoom al enfocar si la fuente del input es < 16px */
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 #root {
@@ -22,4 +33,13 @@ body {
 /* vConsole por encima de glass / tab bar */
 #__vconsole {
   z-index: 2147483646 !important;
+}
+
+/* vConsole: evitar gestos raros de zoom y mejorar toque */
+#__vconsole .vc-switch,
+#__vconsole .vc-mask,
+#__vconsole .vc-panel,
+#__vconsole .vc-toolbar,
+#__vconsole .vc-content {
+  touch-action: manipulation;
 }
