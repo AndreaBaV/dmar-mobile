@@ -54,10 +54,136 @@ body {
 .layout-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  box-sizing: border-box;
   padding: 20px;
-  max-width: 600px; // Optimizado para tablet/móvil
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  position: relative;
+
+  &--centered {
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 20px;
+  }
+}
+
+.boot-message {
+  position: relative;
+  z-index: 1;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.main-shell {
+  flex: 1;
+  width: 100%;
+  max-width: 600px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.main-content {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+
+.tab-bar {
+  position: fixed;
+  z-index: 50;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.06);
+}
+
+.tab-bar__btn {
+  flex: 1;
+  max-width: 120px;
+  padding: 10px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+
+  &.active {
+    color: var(--primary-dark);
+    background: rgba(14, 165, 233, 0.12);
+  }
+}
+
+.session-panel {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.session-title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.session-email {
+  margin: 0;
+  font-size: 0.95rem;
+  word-break: break-all;
+  color: var(--text-main);
+}
+
+.session-expiry {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.session-btn {
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &--secondary {
+    background: rgba(14, 165, 233, 0.15);
+    color: var(--primary-dark);
+  }
+
+  &--danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger);
+  }
 }
 
 // Mixin para efecto cristal
@@ -68,6 +194,10 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   box-shadow: var(--glass-shadow);
+}
+
+.glass-card {
+  @include glass-panel;
 }
 
 // Header
@@ -116,6 +246,10 @@ body {
   display: flex;
   justify-content: center;
   margin-bottom: 30px;
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 440px;
+  box-sizing: border-box;
   
   .mic-container {
     display: flex;

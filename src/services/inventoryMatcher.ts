@@ -47,6 +47,11 @@ export class InventoryMatcher {
     return this.productsCache;
   }
 
+  /** Copia del catálogo en memoria (p. ej. vista inventario). */
+  static getCatalogSnapshot(): Product[] {
+    return [...this.productsCache];
+  }
+
   // Busca el producto en el array descargado
   static findProduct(iaItem: { producto: string, color?: string, talla?: string }): any {
     console.log(`🔍 BUSCANDO: Producto="${iaItem.producto}", Color="${iaItem.color}", Talla="${iaItem.talla}"`);
