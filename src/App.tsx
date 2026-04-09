@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User } from 'firebase/auth';
-import { browserLocalPersistence, onAuthStateChanged, setPersistence, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { SpeechRecognition as CapacitorSpeechRecognition } from '@capacitor-community/speech-recognition';
 import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
@@ -113,23 +113,10 @@ function App() {
     };
 
     void (async () => {
-      try {
-        // #region agent log
-        dlog('H4', 'App setPersistence INICIO');
-        // #endregion
-        await setPersistence(auth, browserLocalPersistence);
-        // #region agent log
-        dlog('H4', 'App setPersistence OK');
-        // #endregion
-      } catch (e) {
-        // #region agent log
-        dlog('H4', 'App setPersistence ERROR', { err: String(e) });
-        // #endregion
-      }
       if (cancelled) return;
 
       // #region agent log
-      dlog('H4', 'App registrando onAuthStateChanged');
+      dlog('H4', 'App registrando onAuthStateChanged (sin setPersistence)');
       // #endregion
       unsub = onAuthStateChanged(auth, async (user) => {
         // #region agent log
