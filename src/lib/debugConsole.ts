@@ -8,6 +8,9 @@ export async function openDebugConsole(): Promise<void> {
   if (vconsoleLoaded || document.getElementById('__vconsole')) {
     const el = document.getElementById('__vconsole') as HTMLElement | null;
     if (el) el.style.zIndex = '2147483646';
+    document.querySelectorAll<HTMLElement>('.vc-switch').forEach((n) => {
+      n.style.zIndex = '2147483647';
+    });
     return;
   }
 
@@ -16,8 +19,17 @@ export async function openDebugConsole(): Promise<void> {
   new VConsole({ theme: 'dark', maxLogNumber: 2000 });
   vconsoleLoaded = true;
 
-  requestAnimationFrame(() => {
+  const bumpZ = () => {
     const el = document.getElementById('__vconsole') as HTMLElement | null;
     if (el) el.style.zIndex = '2147483646';
+    document.querySelectorAll<HTMLElement>('.vc-switch, .vc-mask, .vc-panel').forEach((n) => {
+      n.style.zIndex = '2147483646';
+    });
+  };
+  requestAnimationFrame(() => {
+    bumpZ();
+    requestAnimationFrame(bumpZ);
+    setTimeout(bumpZ, 100);
+    setTimeout(bumpZ, 500);
   });
 }

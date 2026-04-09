@@ -345,7 +345,10 @@ function App() {
     return (
       <div className="layout-container layout-container--centered">
         <div className="bg-gradient" />
-        <LoginView onBeforeSignIn={() => { pendingLoginRenew.current = true; }} />
+        <LoginView
+          onBeforeSignIn={() => { pendingLoginRenew.current = true; }}
+          onSignInFailed={() => { pendingLoginRenew.current = false; }}
+        />
       </div>
     );
   }
