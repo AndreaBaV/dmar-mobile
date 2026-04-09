@@ -12,7 +12,7 @@
  * - Las operaciones funcionan instantáneamente sin esperar red
  */
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeAuth, indexedDBLocalPersistence } from "firebase/auth";
 import {
   initializeFirestore,
   disableNetwork,
@@ -33,10 +33,11 @@ export const firebaseConfig = {
   };
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-
-// getAuth() usa IndexedDB persistence por defecto, que funciona en WKWebView (Capacitor iOS).
-// NO llamar a setPersistence(browserLocalPersistence): cuelga en capacitor://localhost.
+// initializeAuth con solo indexedDBLocalPersistence: getAuth() incluye browserLocalPersistence
+// que cuelga en WKWebView (capacitor://localhost).
+export const auth = initializeAuth(app, {
+  persistence: indexedDBLocalPersistence,
+});
 
 // Inicializar Firestore con persistencia offline habilitada para todas las pestañas
 // Esta configuración crea un "espejo" local de la base de datos
