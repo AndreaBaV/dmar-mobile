@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
@@ -8,7 +8,7 @@ import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
 import { SaleService } from './services/saleService';
 import { auth } from './firebase/config';
-import type { Product, Variant } from './types/Product';
+import type { Product } from './types/Product';
 import {
   renewWeeklySession,
   clearWeeklySession,
@@ -18,6 +18,10 @@ import {
 import { openDebugConsole } from './lib/debugConsole';
 import { LoginView } from './components/LoginView';
 import { InventoryView } from './components/InventoryView';
+import { VoiceCalibrationModal } from './components/VoiceCalibrationModal';
+import { AddProductModal } from './components/AddProductModal';
+import { shouldShowVoiceCalibrationOnboarding } from './lib/voiceCalibrationStorage';
+import { mergeCartLines, productImageUrl, type CartLine } from './utils/cartUtils';
 import './App.scss';
 
 const MicIcon = () => (
@@ -44,14 +48,25 @@ const XIcon = () => (
 const StopSquareIcon = () => (
   <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
 );
-
-interface CartItemReal {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  variant?: Variant;
-}
+const TrashIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+const PlusCircleIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="16" />
+    <line x1="8" y1="12" x2="16" y2="12" />
+  </svg>
+);
+const MinusIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><line x1="5" y1="12" x2="19" y2="12" /></svg>
+);
+const PlusIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+);
 
 type MainTab = 'ventas' | 'inventario' | 'sesion';
 
@@ -82,9 +97,15 @@ function App() {
   const [mensaje, setMensaje] = useState('Inicializando sistema...');
   const [catalogoListo, setCatalogoListo] = useState(false);
   const [productList, setProductList] = useState<Product[]>([]);
-  const [carritoReal, setCarritoReal] = useState<CartItemReal[]>([]);
-  const [total, setTotal] = useState(0);
+  const [carritoReal, setCarritoReal] = useState<CartLine[]>([]);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
+  const [voiceCalibrationOpen, setVoiceCalibrationOpen] = useState(false);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+
+  const totalCarrito = useMemo(
+    () => carritoReal.reduce((s, it) => s + it.price * it.quantity, 0),
+    [carritoReal]
+  );
 
   const nativeSpeechSessionRef = useRef<NativeSpeechSession | null>(null);
   const browserRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -193,6 +214,16 @@ function App() {
     void cargarDatos();
   }, [authUser]);
 
+  useEffect(() => {
+    if (!authUser) {
+      setVoiceCalibrationOpen(false);
+      return;
+    }
+    if (catalogoListo && shouldShowVoiceCalibrationOnboarding()) {
+      setVoiceCalibrationOpen(true);
+    }
+  }, [authUser, catalogoListo]);
+
   const hablar = (texto: string) => {
     const synth = window.speechSynthesis;
     synth.cancel();
@@ -225,8 +256,7 @@ function App() {
         return;
       }
 
-      const itemsEncontrados: CartItemReal[] = [];
-      let nuevoTotal = 0;
+      const itemsEncontrados: CartLine[] = [];
       let advertencias = '';
 
       for (const itemIA of respuestaIA.items) {
@@ -239,23 +269,27 @@ function App() {
           advertencias += `Sin stock para ${match.product.name} en ${itemIA.color} talla ${itemIA.talla}. `;
           continue;
         }
-        const itemReal: CartItemReal = {
+        const itemReal: CartLine = {
           productId: match.product.id,
           name: match.product.name,
           price: match.price,
           quantity: itemIA.cantidad || 1,
           variant: match.variant,
+          imageUrl: productImageUrl(match.product),
         };
         itemsEncontrados.push(itemReal);
-        nuevoTotal += itemReal.price * itemReal.quantity;
       }
 
-      setCarritoReal(itemsEncontrados);
-      setTotal(nuevoTotal);
-
       if (itemsEncontrados.length > 0) {
-        const resumen = `Orden generada. Total: ${nuevoTotal} pesos. ¿Procedo con la venta?`;
-        mensajeConVoz(advertencias ? `${resumen} Revise las advertencias.` : resumen);
+        setCarritoReal((prev) => {
+          const merged = mergeCartLines(prev, itemsEncontrados);
+          const nuevoTotal = merged.reduce((s, i) => s + i.price * i.quantity, 0);
+          queueMicrotask(() => {
+            const resumen = `Productos agregados al ticket. Total: ${nuevoTotal} pesos. ¿Desea confirmar la venta?`;
+            mensajeConVoz(advertencias ? `${resumen} Atención: ${advertencias}` : resumen);
+          });
+          return merged;
+        });
       } else {
         mensajeConVoz(advertencias || 'No entendí la solicitud.');
       }
@@ -410,9 +444,9 @@ function App() {
     try {
       await SaleService.processSale(
         carritoReal,
-        total,
+        totalCarrito,
         'cash',
-        total.toString(),
+        totalCarrito.toString(),
         'contado',
         'Cliente Mostrador',
         'Mar Asistente',
@@ -422,7 +456,6 @@ function App() {
       setTimeout(() => {
         window.print();
         setCarritoReal([]);
-        setTotal(0);
         setProcesandoVenta(false);
         mensajeConVoz('Sistema listo. Toque el botón para hablar.');
       }, 1000);
@@ -442,8 +475,28 @@ function App() {
 
   const cancelarOrden = () => {
     setCarritoReal([]);
-    setTotal(0);
     mensajeConVoz('Orden cancelada.');
+  };
+
+  const quitarLineaTicket = (index: number) => {
+    setCarritoReal((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const cambiarCantidadLinea = (index: number, delta: number) => {
+    setCarritoReal((prev) => {
+      const next = [...prev];
+      const it = next[index];
+      if (!it) return prev;
+      const q = it.quantity + delta;
+      if (q <= 0) return prev.filter((_, i) => i !== index);
+      next[index] = { ...it, quantity: q };
+      return next;
+    });
+  };
+
+  const agregarLineaDesdeCatalogo = (line: CartLine) => {
+    setCarritoReal((prev) => mergeCartLines(prev, [line]));
+    setMensaje('Producto agregado al ticket.');
   };
 
   if (!authChecked) {
@@ -518,31 +571,95 @@ function App() {
                 </div>
               </div>
 
+              {carritoReal.length === 0 && catalogoListo ? (
+                <button
+                  type="button"
+                  className="order-add-product-btn order-add-product-btn--solo"
+                  onClick={() => setAddProductOpen(true)}
+                  disabled={procesandoVenta}
+                >
+                  <PlusCircleIcon />
+                  <span>Agregar producto con fotos</span>
+                </button>
+              ) : null}
+
               {carritoReal.length > 0 && (
                 <div className="order-panel glass-card fade-in">
                   <div className="panel-header">
-                    <h3>Resumen de Operación</h3>
+                    <h3>Ticket</h3>
                     <span className="order-date">{new Date().toLocaleDateString()}</span>
                   </div>
+                  <button
+                    type="button"
+                    className="order-add-product-btn"
+                    onClick={() => setAddProductOpen(true)}
+                    disabled={!catalogoListo || procesandoVenta}
+                  >
+                    <PlusCircleIcon />
+                    <span>Agregar producto</span>
+                  </button>
                   <div className="items-list">
                     {carritoReal.map((it, i) => (
-                      <div key={i} className="item-row">
-                        <div className="item-qty-badge">{it.quantity}</div>
-                        <div className="item-info">
-                          <span className="item-name">{it.name}</span>
-                          {it.variant ? (
-                            <span className="item-variant">
-                              {it.variant.color} • {it.variant.size}
-                            </span>
-                          ) : null}
+                      <div key={`${it.productId}-${it.variant?.color ?? ''}-${it.variant?.size ?? ''}-${i}`} className="item-row">
+                        <div className="item-thumb-wrap">
+                          {it.imageUrl ? (
+                            <img src={it.imageUrl} alt="" className="item-thumb" />
+                          ) : (
+                            <div className="item-thumb-placeholder" aria-hidden />
+                          )}
                         </div>
-                        <div className="item-price">${(it.price * it.quantity).toFixed(2)}</div>
+                        <div className="item-body">
+                          <div className="item-info">
+                            <span className="item-name">{it.name}</span>
+                            {it.variant ? (
+                              <span className="item-variant">
+                                {it.variant.color} • {it.variant.size}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="item-controls">
+                            <div className="item-qty-stepper">
+                              <button
+                                type="button"
+                                className="item-qty-btn"
+                                onClick={() => cambiarCantidadLinea(i, -1)}
+                                disabled={procesandoVenta}
+                                aria-label="Menos uno"
+                              >
+                                <MinusIcon />
+                              </button>
+                              <span className="item-qty-value">{it.quantity}</span>
+                              <button
+                                type="button"
+                                className="item-qty-btn"
+                                onClick={() => cambiarCantidadLinea(i, 1)}
+                                disabled={procesandoVenta}
+                                aria-label="Más uno"
+                              >
+                                <PlusIcon />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              className="item-remove-btn"
+                              onClick={() => quitarLineaTicket(i)}
+                              disabled={procesandoVenta}
+                              aria-label="Quitar del ticket"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="item-price-col">
+                          <span className="item-price">${(it.price * it.quantity).toFixed(2)}</span>
+                          <span className="item-unit">c/u ${it.price.toFixed(2)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
                   <div className="total-section">
                     <span className="total-label">Importe Total</span>
-                    <span className="total-amount">${total.toFixed(2)}</span>
+                    <span className="total-amount">${totalCarrito.toFixed(2)}</span>
                   </div>
                   <div className="order-actions">
                     <button type="button" className="action-button action-button--cancel" onClick={cancelarOrden} disabled={procesandoVenta}>
@@ -555,6 +672,13 @@ function App() {
                   </div>
                 </div>
               )}
+
+              <AddProductModal
+                open={addProductOpen}
+                products={productList}
+                onClose={() => setAddProductOpen(false)}
+                onAddLine={agregarLineaDesdeCatalogo}
+              />
 
               <div className="print-only" />
             </>
@@ -576,6 +700,9 @@ function App() {
               <button type="button" className="session-btn session-btn--secondary" onClick={() => void openDebugConsole()}>
                 Abrir consola de logs
               </button>
+              <button type="button" className="session-btn session-btn--secondary" onClick={() => setVoiceCalibrationOpen(true)}>
+                Práctica de reconocimiento de voz
+              </button>
               <button type="button" className="session-btn session-btn--danger" onClick={() => void handleLogout()}>
                 Cerrar sesión
               </button>
@@ -583,6 +710,8 @@ function App() {
           )}
         </main>
       </div>
+
+      <VoiceCalibrationModal open={voiceCalibrationOpen} onClose={() => setVoiceCalibrationOpen(false)} />
 
       <nav className="tab-bar" aria-label="Secciones">
         <button type="button" className={`tab-bar__btn ${mainTab === 'ventas' ? 'active' : ''}`} onClick={() => setMainTab('ventas')}>

@@ -392,55 +392,190 @@ body {
     }
   }
 
+  .order-add-product-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 14px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.08));
+    color: var(--primary-dark, #0284c7);
+    border: 1px solid rgba(14, 165, 233, 0.35);
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    &--solo {
+      max-width: 440px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
+
   .items-list {
-    max-height: 300px;
+    max-height: min(52dvh, 420px);
     overflow-y: auto;
     margin-bottom: 20px;
 
     .item-row {
       display: flex;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.03);
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 
-      &:last-child { border-bottom: none; }
+      &:last-child {
+        border-bottom: none;
+      }
     }
 
-    .item-qty-badge {
-      background: #e0f2fe;
-      color: var(--primary-dark);
-      font-weight: 700;
-      font-size: 1.1rem;
-      min-width: 40px;
-      min-height: 40px;
+    .item-thumb-wrap {
+      flex-shrink: 0;
+      width: 72px;
+      height: 72px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #f1f5f9;
+    }
+
+    .item-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .item-thumb-placeholder {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+    }
+
+    .item-body {
+      flex: 1;
+      min-width: 0;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px 10px;
-      border-radius: 10px;
-      margin-right: 12px;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .item-info {
-      flex: 1;
       display: flex;
       flex-direction: column;
+      gap: 4px;
 
       .item-name {
-        font-weight: 600;
+        font-weight: 700;
         font-size: 0.95rem;
+        line-height: 1.25;
+        color: var(--text-main);
       }
+
       .item-variant {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         color: var(--text-secondary);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
       }
     }
 
-    .item-price {
-      font-weight: 700;
+    .item-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .item-qty-stepper {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 12px;
+      padding: 4px 6px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+    }
+
+    .item-qty-btn {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0;
+      border: none;
+      border-radius: 10px;
+      background: rgba(14, 165, 233, 0.15);
+      color: var(--primary-dark, #0284c7);
+      cursor: pointer;
+      touch-action: manipulation;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+    }
+
+    .item-qty-value {
+      min-width: 28px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 1.1rem;
       color: var(--text-main);
+    }
+
+    .item-remove-btn {
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      padding: 0;
+      border: none;
+      border-radius: 12px;
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger, #ef4444);
+      cursor: pointer;
+      touch-action: manipulation;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+    }
+
+    .item-price-col {
+      flex-shrink: 0;
+      text-align: right;
+      align-self: center;
+    }
+
+    .item-price {
+      display: block;
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: var(--text-main);
+    }
+
+    .item-unit {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
     }
   }
 
