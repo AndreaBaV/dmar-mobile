@@ -30,6 +30,18 @@ const CheckIcon = () => (
 const LoaderIcon = () => (
   <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
 );
+const CartIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+);
+const BoxIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+);
+const UserIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+);
+const XIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+);
 
 interface CartItemReal {
   productId: string;
@@ -54,6 +66,7 @@ type BrowserSpeechRecognition = {
 
 function App() {
   const pendingLoginRenew = useRef(false);
+  const guiaInicialDada = useRef(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('ventas');
@@ -151,11 +164,16 @@ function App() {
         log('después InventoryMatcher.loadCatalog() OK');
         setProductList(InventoryMatcher.getCatalogSnapshot());
         setCatalogoListo(true);
-        setMensaje('Sistema listo. Pulse para iniciar.');
+        const guia = 'Sistema listo. Toque el botón para hablar.';
+        setMensaje(guia);
+        if (!guiaInicialDada.current) {
+          guiaInicialDada.current = true;
+          hablar(guia);
+        }
       } catch (error) {
         const err = error as Error;
         console.error('[DMAR:init] cargarDatos ERROR', err?.message, err?.stack, error);
-        setMensaje('Error de conexión con el inventario.');
+        mensajeConVoz('Error de conexión con el inventario.');
       } finally {
         log('fin cargarDatos', { totalMs: (performance.now() - t0).toFixed(0) });
       }
@@ -180,6 +198,11 @@ function App() {
     synth.speak(utterThis);
   };
 
+  const mensajeConVoz = (texto: string) => {
+    setMensaje(texto);
+    hablar(texto);
+  };
+
   const iniciarEscucha = async () => {
     if (!catalogoListo) return alert('El catálogo aún se está cargando.');
     const esMovil = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -199,7 +222,7 @@ function App() {
             void procesarResultado(result.matches[0]);
           } else {
             setEstaEscuchando(false);
-            setMensaje('No se detectó audio.');
+            mensajeConVoz('No se detectó audio.');
           }
         });
       } catch (e) {
@@ -223,7 +246,7 @@ function App() {
       };
       recognition.onerror = () => {
         setEstaEscuchando(false);
-        setMensaje('Error al capturar audio.');
+        mensajeConVoz('Error al capturar audio.');
       };
       recognition.onend = () => setEstaEscuchando(false);
       recognition.start();
@@ -236,8 +259,7 @@ function App() {
     try {
       const respuestaIA = await consultarAMar(texto);
       if (!respuestaIA || !respuestaIA.items || respuestaIA.items.length === 0) {
-        hablar('No pude identificar productos en su orden.');
-        setMensaje('Sin productos detectados.');
+        mensajeConVoz('No pude identificar productos en su orden.');
         return;
       }
 
@@ -270,17 +292,14 @@ function App() {
       setTotal(nuevoTotal);
 
       if (itemsEncontrados.length > 0) {
-        const resumen = `Orden generada. Total: ${nuevoTotal} pesos.`;
-        setMensaje(advertencias ? 'Revise las advertencias.' : 'Orden lista para confirmar.');
-        hablar(resumen + ' ¿Procedo con la venta?');
+        const resumen = `Orden generada. Total: ${nuevoTotal} pesos. ¿Procedo con la venta?`;
+        mensajeConVoz(advertencias ? `${resumen} Revise las advertencias.` : resumen);
       } else {
-        setMensaje('No se pudo procesar la orden.');
-        hablar(advertencias || 'No entendí la solicitud.');
+        mensajeConVoz(advertencias || 'No entendí la solicitud.');
       }
     } catch (error) {
       console.error(error);
-      setMensaje('Error de comunicación.');
-      hablar('Error de comunicación con el servidor.');
+      mensajeConVoz('Error de comunicación con el servidor.');
     }
   };
 
@@ -289,7 +308,7 @@ function App() {
     setProcesandoVenta(true);
     setMensaje('Autorizando transacción...');
     try {
-      const ventaId = await SaleService.processSale(
+      await SaleService.processSale(
         carritoReal,
         total,
         'cash',
@@ -299,20 +318,18 @@ function App() {
         'Mar Asistente',
         false
       );
-      setMensaje(`Venta ${ventaId.substring(0, 6)} exitosa.`);
-      hablar('Transacción completada exitosamente.');
+      mensajeConVoz('Transacción completada exitosamente.');
       setTimeout(() => {
         window.print();
         setCarritoReal([]);
         setTotal(0);
         setProcesandoVenta(false);
-        setMensaje('Sistema listo para nueva operación.');
+        mensajeConVoz('Sistema listo. Toque el botón para hablar.');
       }, 1000);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error(error);
-      setMensaje(`Error: ${msg}`);
-      hablar('Error al registrar la venta.');
+      mensajeConVoz(`Error al registrar la venta. ${msg}`);
       setProcesandoVenta(false);
     }
   };
@@ -321,6 +338,12 @@ function App() {
     clearWeeklySession();
     await signOut(auth);
     setMainTab('ventas');
+  };
+
+  const cancelarOrden = () => {
+    setCarritoReal([]);
+    setTotal(0);
+    mensajeConVoz('Orden cancelada.');
   };
 
   if (!authChecked) {
@@ -369,9 +392,13 @@ function App() {
                     className={`mic-button ${estaEscuchando ? 'listening' : ''}`}
                     onClick={() => void iniciarEscucha()}
                     disabled={!catalogoListo || procesandoVenta}
+                    aria-label="Toque para hablar"
                   >
                     {estaEscuchando ? <WaveIcon /> : <MicIcon />}
                   </button>
+                  <span className="mic-label">
+                    {estaEscuchando ? 'Escuchando…' : 'Toque para hablar'}
+                  </span>
                   <div className="status-indicator">
                     <span className={`dot ${catalogoListo ? 'ready' : 'busy'}`} />
                     <p className="status-text">{mensaje}</p>
@@ -405,10 +432,15 @@ function App() {
                     <span className="total-label">Importe Total</span>
                     <span className="total-amount">${total.toFixed(2)}</span>
                   </div>
-                  <button type="button" className="action-button" onClick={() => void confirmarVenta()} disabled={procesandoVenta}>
-                    {procesandoVenta ? <LoaderIcon /> : <CheckIcon />}
-                    <span>{procesandoVenta ? 'Procesando...' : 'Autorizar Venta'}</span>
-                  </button>
+                  <div className="order-actions">
+                    <button type="button" className="action-button action-button--cancel" onClick={cancelarOrden} disabled={procesandoVenta}>
+                      <XIcon /><span>Cancelar</span>
+                    </button>
+                    <button type="button" className="action-button action-button--confirm" onClick={() => void confirmarVenta()} disabled={procesandoVenta}>
+                      {procesandoVenta ? <LoaderIcon /> : <CheckIcon />}
+                      <span>{procesandoVenta ? 'Procesando...' : 'Confirmar'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -442,13 +474,13 @@ function App() {
 
       <nav className="tab-bar" aria-label="Secciones">
         <button type="button" className={`tab-bar__btn ${mainTab === 'ventas' ? 'active' : ''}`} onClick={() => setMainTab('ventas')}>
-          Ventas
+          <CartIcon /><span>Ventas</span>
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'inventario' ? 'active' : ''}`} onClick={() => setMainTab('inventario')}>
-          Inventario
+          <BoxIcon /><span>Inventario</span>
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'sesion' ? 'active' : ''}`} onClick={() => setMainTab('sesion')}>
-          Sesión
+          <UserIcon /><span>Sesión</span>
         </button>
       </nav>
     </div>

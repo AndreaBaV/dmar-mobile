@@ -3,6 +3,7 @@ html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  font-size: 16px;
 }
 
 body {
@@ -10,15 +11,20 @@ body {
   min-width: 320px;
   min-height: 100%;
   min-height: 100dvh;
-  /* Menos zoom por doble toque (iOS/Safari) al pulsar botones pequeños */
   touch-action: manipulation;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-/* iOS hace zoom al enfocar si la fuente del input es < 16px */
 input,
 textarea,
 select {
   font-size: 16px;
+}
+
+button {
+  min-height: 48px;
+  min-width: 48px;
 }
 
 #root {

@@ -1,7 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacitor-speech-recognition';
 import type { Product } from '../types/Product';
 import { ProductService } from '../services/productService';
 import './InventoryView.scss';
+
+type BrowserSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  start: () => void;
+  onstart: (() => void) | null;
+  onresult: ((ev: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+const SearchMicIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+);
 
 type Props = {
   products: Product[];
@@ -19,6 +34,47 @@ function variantStockLine(p: Product) {
 
 export function InventoryView({ products, catalogoListo }: Props) {
   const [q, setQ] = useState('');
+  const [escuchando, setEscuchando] = useState(false);
+
+  const buscarPorVoz = useCallback(async () => {
+    const esMovil = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (esMovil) {
+      try {
+        const { available } = await CapacitorSpeechRecognition.available();
+        if (!available) return;
+        await CapacitorSpeechRecognition.requestPermissions();
+        setEscuchando(true);
+        const result = await CapacitorSpeechRecognition.start({
+          language: 'es-MX',
+          partialResults: false,
+          popup: false,
+        });
+        setEscuchando(false);
+        if (result?.matches?.[0]) setQ(result.matches[0]);
+      } catch {
+        setEscuchando(false);
+      }
+    } else {
+      const w = window as unknown as {
+        SpeechRecognition?: new () => BrowserSpeechRecognition;
+        webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+      };
+      const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+      if (!SR) return;
+      const recognition = new SR();
+      recognition.lang = 'es-MX';
+      recognition.continuous = false;
+      recognition.onstart = () => setEscuchando(true);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0]?.[0]?.transcript;
+        if (transcript) setQ(transcript);
+      };
+      recognition.onerror = () => setEscuchando(false);
+      recognition.onend = () => setEscuchando(false);
+      recognition.start();
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -38,14 +94,24 @@ export function InventoryView({ products, catalogoListo }: Props) {
       ) : (
         <>
           <div className="inventory-toolbar">
-            <input
-              type="search"
-              className="inventory-search"
-              placeholder="Buscar producto, categoría, color, talla…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              enterKeyHint="search"
-            />
+            <div className="inventory-search-row">
+              <input
+                type="search"
+                className="inventory-search"
+                placeholder="Buscar producto…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                enterKeyHint="search"
+              />
+              <button
+                type="button"
+                className={`inventory-mic-btn ${escuchando ? 'listening' : ''}`}
+                onClick={() => void buscarPorVoz()}
+                aria-label="Buscar por voz"
+              >
+                <SearchMicIcon />
+              </button>
+            </div>
             <p className="inventory-meta">
               {filtered.length} artículo{filtered.length === 1 ? '' : 's'} ·{' '}
               <strong>{availableCount}</strong> con stock

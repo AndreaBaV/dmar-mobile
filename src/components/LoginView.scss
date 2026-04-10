@@ -45,23 +45,23 @@
 .login-label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 8px;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-main, #1e293b);
 }
 
 .login-input {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  /* 16px mínimo: iOS no hace zoom automático al focus */
-  font-size: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(15, 23, 42, 0.15);
+  font-size: 18px;
   font-family: inherit;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text-main, #1e293b);
   width: 100%;
   box-sizing: border-box;
+  min-height: 52px;
 }
 
 .login-password-row {
@@ -107,14 +107,15 @@
 
 .login-submit {
   margin-top: 8px;
-  padding: 14px;
+  padding: 16px;
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 700;
   font-family: inherit;
   cursor: pointer;
   touch-action: manipulation;
+  min-height: 56px;
   background: linear-gradient(135deg, var(--primary-blue, #0ea5e9), var(--primary-dark, #0284c7));
   color: white;
 }

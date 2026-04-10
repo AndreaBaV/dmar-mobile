@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
@@ -32,6 +32,20 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(
+        'Pantalla de inicio de sesión. Pida ayuda a alguien para ingresar su correo y contraseña.'
+      );
+      u.lang = 'es-MX';
+      u.rate = 1.0;
+      synth.speak(u);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();

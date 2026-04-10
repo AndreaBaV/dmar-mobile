@@ -9,8 +9,8 @@
   
   --primary-blue: #0ea5e9;      // Azul corporativo vibrante
   --primary-dark: #0284c7;      // Azul más oscuro para hover
-  --text-main: #1e293b;         // Slate 800
-  --text-secondary: #64748b;    // Slate 500
+  --text-main: #0f172a;         // Slate 900 – higher contrast
+  --text-secondary: #475569;    // Slate 600 – WCAG AA on light bg
   
   --success: #10b981;
   --danger: #ef4444;
@@ -118,18 +118,26 @@ body {
 .tab-bar__btn {
   flex: 1;
   max-width: 120px;
-  min-height: 44px;
-  padding: 10px 8px;
+  min-height: 52px;
+  padding: 6px 8px 8px;
   border: none;
   border-radius: 12px;
   background: transparent;
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   touch-action: manipulation;
   transition: background 0.2s, color 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+
+  svg {
+    flex-shrink: 0;
+  }
 
   &.active {
     color: var(--primary-dark);
@@ -173,9 +181,11 @@ body {
   border: none;
   border-radius: 12px;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
+  min-height: 52px;
+  touch-action: manipulation;
 
   &--secondary {
     background: rgba(14, 165, 233, 0.15);
@@ -261,14 +271,14 @@ body {
   }
 
   .mic-button {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
     border: none;
     background: linear-gradient(145deg, #ffffff, #f0f9ff);
     box-shadow:
-      5px 5px 10px #d1d9e6,
-      -5px -5px 10px #ffffff; // Neumorphism sutil
+      6px 6px 14px #d1d9e6,
+      -6px -6px 14px #ffffff;
     color: var(--primary-blue);
     cursor: pointer;
     touch-action: manipulation;
@@ -278,8 +288,8 @@ body {
     justify-content: center;
 
     svg {
-      width: 32px;
-      height: 32px;
+      width: 48px;
+      height: 48px;
     }
 
     &:active {
@@ -291,6 +301,13 @@ body {
       color: white;
       animation: pulse-blue 2s infinite;
     }
+  }
+
+  .mic-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 4px;
   }
 
   .status-indicator {
@@ -359,9 +376,14 @@ body {
       background: #e0f2fe;
       color: var(--primary-dark);
       font-weight: 700;
-      font-size: 0.85rem;
+      font-size: 1.1rem;
+      min-width: 40px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 4px 10px;
-      border-radius: 8px;
+      border-radius: 10px;
       margin-right: 12px;
     }
 
@@ -410,36 +432,58 @@ body {
     }
   }
 
+  .order-actions {
+    display: flex;
+    gap: 12px;
+  }
+
   .action-button {
-    width: 100%;
+    flex: 1;
+    min-height: 56px;
     padding: 16px;
     border: none;
-    border-radius: 12px;
-    background: linear-gradient(135deg, var(--primary-blue), var(--primary-dark));
+    border-radius: 14px;
     color: white;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 1rem;
+    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
     transition: transform 0.2s, box-shadow 0.2s;
-
-    &:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);
-    }
+    touch-action: manipulation;
 
     &:disabled {
-      background: var(--text-secondary);
       cursor: not-allowed;
-      opacity: 0.7;
+      opacity: 0.6;
     }
 
     .animate-spin {
       animation: spin 1s linear infinite;
+    }
+
+    &--confirm {
+      flex: 2;
+      background: linear-gradient(135deg, var(--success), #059669);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+
+      &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+      }
+    }
+
+    &--cancel {
+      flex: 1;
+      background: linear-gradient(135deg, var(--danger), #dc2626);
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+
+      &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
+      }
     }
   }
 }
