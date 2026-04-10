@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { openDebugConsole } from '../lib/debugConsole';
-import { dlog, getLogEntries, subscribeLog } from '../lib/dlog';
 import './LoginView.scss';
 
 const LOGIN_TIMEOUT_MS = 15_000;
@@ -27,22 +26,6 @@ type Props = {
   onSignInFailed?: () => void;
 };
 
-function DebugPanel() {
-  const [, setTick] = useState(0);
-  useEffect(() => subscribeLog(() => setTick((n) => n + 1)), []);
-  const entries = getLogEntries();
-  if (entries.length === 0) return null;
-  return (
-    <pre className="login-debug-panel">
-      {entries.map((e) => {
-        const ts = new Date(e.t).toLocaleTimeString();
-        const d = e.data ? ' ' + JSON.stringify(e.data) : '';
-        return `${ts} [${e.h}] ${e.msg}${d}\n`;
-      }).join('')}
-    </pre>
-  );
-}
-
 export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -58,10 +41,6 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
     const emailTrim = email.trim();
     const emailNorm = emailTrim.toLowerCase();
 
-    // #region agent log
-    dlog('H1', 'LoginView handleSubmit INICIO', { emailNorm, timeoutMs: LOGIN_TIMEOUT_MS });
-    // #endregion
-
     let waitUnsub: (() => void) | undefined;
     let waitTimer: ReturnType<typeof window.setTimeout> | undefined;
 
@@ -76,30 +55,13 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
 
     const userAppeared = new Promise<User>((resolve, reject) => {
       waitTimer = window.setTimeout(() => {
-        // #region agent log
-        dlog('H5', 'LoginView onAuthStateChanged TIMEOUT disparó', { ms: LOGIN_TIMEOUT_MS });
-        // #endregion
         cleanupExtraListener();
         reject(new Error('LOGIN_TIMEOUT'));
       }, LOGIN_TIMEOUT_MS);
 
-      // #region agent log
-      dlog('H2', 'LoginView: registrando onAuthStateChanged listener');
-      // #endregion
       waitUnsub = onAuthStateChanged(auth, (user) => {
-        // #region agent log
-        dlog('H2', 'LoginView onAuthStateChanged DISPARO', {
-          hasUser: !!user,
-          userEmail: user?.email ?? null,
-          expectedEmail: emailNorm,
-          match: user?.email?.toLowerCase() === emailNorm,
-        });
-        // #endregion
         if (!user?.email) return;
         if (user.email.toLowerCase() !== emailNorm) return;
-        // #region agent log
-        dlog('H2', 'LoginView onAuthStateChanged: MATCH → resolve', { uid: user.uid });
-        // #endregion
         window.clearTimeout(waitTimer);
         waitTimer = undefined;
         waitUnsub?.();
@@ -109,50 +71,16 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
     });
 
     onBeforeSignIn();
-    // #region agent log
-    dlog('H3', 'LoginView: onBeforeSignIn() llamado (pendingLoginRenew=true)');
-    // #endregion
 
     try {
-      // #region agent log
-      dlog('H1', 'LoginView: ANTES signInWithEmailAndPassword');
-      // #endregion
-
-      const signInPromise = signInWithEmailAndPassword(auth, emailTrim, password)
-        .then((cred) => {
-          // #region agent log
-          dlog('H1', 'LoginView: signInWithEmailAndPassword RESOLVIÓ', { uid: cred.user.uid, email: cred.user.email });
-          // #endregion
-          return cred;
-        })
-        .catch((err: unknown) => {
-          // #region agent log
-          const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : 'unknown';
-          dlog('H1', 'LoginView: signInWithEmailAndPassword RECHAZÓ', { code, msg: String(err) });
-          // #endregion
-          throw err;
-        });
-
-      // #region agent log
-      dlog('H1', 'LoginView: ANTES Promise.race([signIn, userAppeared])');
-      // #endregion
-
+      const signInPromise = signInWithEmailAndPassword(auth, emailTrim, password);
       await Promise.race([signInPromise, userAppeared]);
-
-      // #region agent log
-      dlog('H1', 'LoginView: Promise.race RESOLVIÓ OK');
-      // #endregion
     } catch (err: unknown) {
       cleanupExtraListener();
       onSignInFailed?.();
 
-      // #region agent log
-      const errMsg = err instanceof Error ? err.message : String(err);
-      dlog('H1', 'LoginView: Promise.race RECHAZÓ', { errMsg });
-      // #endregion
-
       if (err instanceof Error && err.message === 'LOGIN_TIMEOUT') {
-        setError('La petición tardó demasiado. Vea los logs abajo.');
+        setError('La petición tardó demasiado. Revise la red o intente de nuevo.');
       } else {
         const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : '';
         if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
@@ -162,7 +90,7 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
         } else if (code === 'auth/network-request-failed') {
           setError('Sin conexión o bloqueo de red.');
         } else {
-          setError(`Error: ${err instanceof Error ? err.message : String(err)}`);
+          setError('No se pudo iniciar sesión.');
         }
       }
     } finally {
@@ -217,7 +145,6 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
         <button type="button" className="login-logs-link" onClick={() => void openDebugConsole()}>
           Ver logs (depuración)
         </button>
-        <DebugPanel />
       </div>
     </div>
   );

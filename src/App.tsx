@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { SpeechRecognition as CapacitorSpeechRecognition } from '@capacitor-community/speech-recognition';
+import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacitor-speech-recognition';
 import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
 import { SaleService } from './services/saleService';
@@ -14,7 +14,6 @@ import {
   formatSessionExpiry,
 } from './lib/weeklyAuth';
 import { openDebugConsole } from './lib/debugConsole';
-import { dlog } from './lib/dlog';
 import { LoginView } from './components/LoginView';
 import { InventoryView } from './components/InventoryView';
 import './App.scss';
@@ -72,15 +71,8 @@ function App() {
     let cancelled = false;
     let initialAuthHandled = false;
 
-    // #region agent log
-    dlog('H4', 'App useEffect: antes de setPersistence');
-    // #endregion
-
     const bootTimeoutId = window.setTimeout(() => {
       if (cancelled || initialAuthHandled) return;
-      // #region agent log
-      dlog('H4', 'App bootTimeout disparó (4.5s)', { cancelled, initialAuthHandled });
-      // #endregion
       initialAuthHandled = true;
       setAuthUser(null);
       setAuthChecked(true);
@@ -93,40 +85,18 @@ function App() {
     };
 
     const safeSignOut = async () => {
-      // #region agent log
-      dlog('H3', 'App safeSignOut INICIO');
-      // #endregion
       await Promise.race([
         signOut(auth),
         new Promise<void>((resolve) => {
-          setTimeout(() => {
-            // #region agent log
-            dlog('H3', 'App safeSignOut timeout (12s)');
-            // #endregion
-            resolve();
-          }, 12000);
+          setTimeout(resolve, 12000);
         }),
       ]);
-      // #region agent log
-      dlog('H3', 'App safeSignOut FIN');
-      // #endregion
     };
 
     void (async () => {
       if (cancelled) return;
 
-      // #region agent log
-      dlog('H4', 'App registrando onAuthStateChanged (sin setPersistence)');
-      // #endregion
       unsub = onAuthStateChanged(auth, async (user) => {
-        // #region agent log
-        dlog('H3', 'App onAuthStateChanged DISPARO', {
-          hasUser: !!user,
-          email: user?.email ?? null,
-          pendingLoginRenew: pendingLoginRenew.current,
-          weeklyValid: isWeeklySessionValid(),
-        });
-        // #endregion
         finishBoot();
 
         if (!user) {
@@ -136,27 +106,18 @@ function App() {
         }
         if (!isWeeklySessionValid()) {
           if (pendingLoginRenew.current) {
-            // #region agent log
-            dlog('H3', 'App: pendingLoginRenew=true → renew sesión OK', { email: user.email });
-            // #endregion
             pendingLoginRenew.current = false;
             renewWeeklySession();
             setAuthUser(user);
             setAuthChecked(true);
             return;
           }
-          // #region agent log
-          dlog('H3', 'App: weeklySession inválida, pendingLoginRenew=false → signOut', { email: user.email });
-          // #endregion
           await safeSignOut();
           clearWeeklySession();
           setAuthUser(null);
           setAuthChecked(true);
           return;
         }
-        // #region agent log
-        dlog('H3', 'App: weeklySession válida → setAuthUser', { email: user.email });
-        // #endregion
         setAuthUser(user);
         setAuthChecked(true);
       });
