@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacitor-speech-recognition';
+import { startNativeSpeechSession, type NativeSpeechSession } from './lib/nativeSpeechSession';
 import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
 import { SaleService } from './services/saleService';
@@ -21,9 +23,6 @@ import './App.scss';
 const MicIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
 );
-const WaveIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v4"/></svg>
-);
 const CheckIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 );
@@ -42,6 +41,9 @@ const UserIcon = () => (
 const XIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 );
+const StopSquareIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+);
 
 interface CartItemReal {
   productId: string;
@@ -57,9 +59,14 @@ type MainTab = 'ventas' | 'inventario' | 'sesion';
 type BrowserSpeechRecognition = {
   lang: string;
   continuous: boolean;
+  interimResults: boolean;
   start: () => void;
+  stop: () => void;
   onstart: (() => void) | null;
-  onresult: ((ev: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+  onresult: ((ev: {
+    resultIndex: number;
+    results: ArrayLike<{ length: number; 0: { transcript: string }; isFinal: boolean }>;
+  }) => void) | null;
   onerror: (() => void) | null;
   onend: (() => void) | null;
 };
@@ -78,6 +85,11 @@ function App() {
   const [carritoReal, setCarritoReal] = useState<CartItemReal[]>([]);
   const [total, setTotal] = useState(0);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
+
+  const nativeSpeechSessionRef = useRef<NativeSpeechSession | null>(null);
+  const browserRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const transcripcionRef = useRef('');
+  const browserProcesarAlDetenerRef = useRef(false);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -203,56 +215,6 @@ function App() {
     hablar(texto);
   };
 
-  const iniciarEscucha = async () => {
-    if (!catalogoListo) return alert('El catálogo aún se está cargando.');
-    const esMovil = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (esMovil) {
-      try {
-        const { available } = await CapacitorSpeechRecognition.available();
-        if (!available) return alert('Reconocimiento de voz no disponible');
-        await CapacitorSpeechRecognition.requestPermissions();
-        setEstaEscuchando(true);
-        CapacitorSpeechRecognition.start({
-          language: 'es-MX',
-          partialResults: false,
-          popup: false,
-        }).then((result) => {
-          if (result?.matches && result.matches.length > 0) {
-            void procesarResultado(result.matches[0]);
-          } else {
-            setEstaEscuchando(false);
-            mensajeConVoz('No se detectó audio.');
-          }
-        });
-      } catch (e) {
-        console.error(e);
-        setEstaEscuchando(false);
-      }
-    } else {
-      const w = window as unknown as {
-        SpeechRecognition?: new () => BrowserSpeechRecognition;
-        webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
-      };
-      const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-      if (!SR) return alert('Navegador no compatible. Use Chrome.');
-      const recognition = new SR();
-      recognition.lang = 'es-MX';
-      recognition.continuous = false;
-      recognition.onstart = () => setEstaEscuchando(true);
-      recognition.onresult = (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => {
-        const transcript = event.results[0]?.[0]?.transcript;
-        if (transcript) void procesarResultado(transcript);
-      };
-      recognition.onerror = () => {
-        setEstaEscuchando(false);
-        mensajeConVoz('Error al capturar audio.');
-      };
-      recognition.onend = () => setEstaEscuchando(false);
-      recognition.start();
-    }
-  };
-
   const procesarResultado = async (texto: string) => {
     setEstaEscuchando(false);
     setMensaje('Procesando solicitud...');
@@ -302,6 +264,144 @@ function App() {
       mensajeConVoz('Error de comunicación con el servidor.');
     }
   };
+
+  const iniciarEscucha = async () => {
+    if (!catalogoListo) {
+      alert('El catálogo aún se está cargando.');
+      return;
+    }
+    if (estaEscuchando || procesandoVenta) return;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { available } = await CapacitorSpeechRecognition.available();
+        if (!available) {
+          alert('Reconocimiento de voz no disponible');
+          return;
+        }
+        await CapacitorSpeechRecognition.requestPermissions();
+        if (nativeSpeechSessionRef.current) {
+          try {
+            await nativeSpeechSessionRef.current.finish();
+          } catch {
+            /* ignorar sesión colgada */
+          }
+          nativeSpeechSessionRef.current = null;
+        }
+        nativeSpeechSessionRef.current = await startNativeSpeechSession('es-MX');
+        setEstaEscuchando(true);
+        setMensaje('Escuchando… Toque detener cuando termine.');
+      } catch (e) {
+        console.error(e);
+        nativeSpeechSessionRef.current = null;
+        setEstaEscuchando(false);
+        mensajeConVoz('Error al iniciar el micrófono.');
+      }
+      return;
+    }
+
+    const w = window as unknown as {
+      SpeechRecognition?: new () => BrowserSpeechRecognition;
+      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    };
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Navegador no compatible. Use Chrome.');
+      return;
+    }
+    transcripcionRef.current = '';
+    browserProcesarAlDetenerRef.current = false;
+    const recognition = new SR();
+    recognition.lang = 'es-MX';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => setEstaEscuchando(true);
+    recognition.onresult = (event) => {
+      let line = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const r = event.results[i];
+        line += r[0]?.transcript ?? '';
+      }
+      transcripcionRef.current = line.trim();
+    };
+    recognition.onerror = () => {
+      setEstaEscuchando(false);
+      browserRecognitionRef.current = null;
+      browserProcesarAlDetenerRef.current = false;
+      mensajeConVoz('Error al capturar audio.');
+    };
+    recognition.onend = () => {
+      setEstaEscuchando(false);
+      browserRecognitionRef.current = null;
+      const debe = browserProcesarAlDetenerRef.current;
+      browserProcesarAlDetenerRef.current = false;
+      if (debe) {
+        const text = transcripcionRef.current.trim();
+        if (text) void procesarResultado(text);
+        else mensajeConVoz('No se detectó audio.');
+      }
+    };
+    browserRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setMensaje('Escuchando… Toque detener cuando termine.');
+    } catch (e) {
+      console.error(e);
+      browserRecognitionRef.current = null;
+      setEstaEscuchando(false);
+      mensajeConVoz('No se pudo iniciar el micrófono.');
+    }
+  };
+
+  const detenerYProcesarVenta = async () => {
+    if (!estaEscuchando) return;
+    setMensaje('Procesando solicitud...');
+
+    if (Capacitor.isNativePlatform()) {
+      const session = nativeSpeechSessionRef.current;
+      nativeSpeechSessionRef.current = null;
+      setEstaEscuchando(false);
+      if (!session) return;
+      try {
+        const text = await session.finish();
+        if (text) await procesarResultado(text);
+        else mensajeConVoz('No se detectó audio.');
+      } catch (e) {
+        console.error(e);
+        mensajeConVoz('Error al capturar audio.');
+      }
+      return;
+    }
+
+    const r = browserRecognitionRef.current;
+    if (r) {
+      browserProcesarAlDetenerRef.current = true;
+      try {
+        r.stop();
+      } catch (e) {
+        console.error(e);
+        setEstaEscuchando(false);
+        browserRecognitionRef.current = null;
+        browserProcesarAlDetenerRef.current = false;
+        mensajeConVoz('Error al capturar audio.');
+      }
+    } else {
+      setEstaEscuchando(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (Capacitor.isNativePlatform()) {
+        void CapacitorSpeechRecognition.stop().catch(() => {});
+      }
+      try {
+        browserRecognitionRef.current?.stop();
+      } catch {
+        /* */
+      }
+    };
+  }, []);
 
   const confirmarVenta = async () => {
     if (carritoReal.length === 0) return;
@@ -387,17 +487,29 @@ function App() {
             <>
               <div className="control-panel glass-card">
                 <div className="mic-container">
-                  <button
-                    type="button"
-                    className={`mic-button ${estaEscuchando ? 'listening' : ''}`}
-                    onClick={() => void iniciarEscucha()}
-                    disabled={!catalogoListo || procesandoVenta}
-                    aria-label="Toque para hablar"
-                  >
-                    {estaEscuchando ? <WaveIcon /> : <MicIcon />}
-                  </button>
+                  <div className="mic-actions-row">
+                    <button
+                      type="button"
+                      className={`mic-button ${estaEscuchando ? 'listening' : ''}`}
+                      onClick={() => void iniciarEscucha()}
+                      disabled={!catalogoListo || procesandoVenta || estaEscuchando}
+                      aria-label="Toque para hablar"
+                    >
+                      <MicIcon />
+                    </button>
+                    {estaEscuchando ? (
+                      <button
+                        type="button"
+                        className="mic-stop-btn"
+                        onClick={() => void detenerYProcesarVenta()}
+                        aria-label="Detener y procesar pedido"
+                      >
+                        <StopSquareIcon />
+                      </button>
+                    ) : null}
+                  </div>
                   <span className="mic-label">
-                    {estaEscuchando ? 'Escuchando…' : 'Toque para hablar'}
+                    {estaEscuchando ? 'Toque el cuadrado rojo cuando termine de hablar' : 'Toque para hablar'}
                   </span>
                   <div className="status-indicator">
                     <span className={`dot ${catalogoListo ? 'ready' : 'busy'}`} />
