@@ -4,6 +4,7 @@ import {
   markVoiceCalibrationComplete,
   markVoiceCalibrationSkipped,
 } from '../lib/voiceCalibrationStorage';
+import { cancelSpeech, speakGuidance } from '../lib/voiceOutput';
 import { useVoiceCapture } from '../hooks/useVoiceCapture';
 import './VoiceCalibrationModal.scss';
 
@@ -14,21 +15,6 @@ const MicIcon = () => (
 const StopSquareIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
 );
-
-function hablar(texto: string) {
-  const synth = window.speechSynthesis;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(texto);
-  u.lang = 'es-MX';
-  u.rate = 0.98;
-  const voces = synth.getVoices();
-  const voz =
-    voces.find((v) => v.lang.startsWith('es') && /female|mujer|español/i.test(v.name)) ??
-    voces.find((v) => v.lang.startsWith('es'));
-  if (voz) u.voice = voz;
-  synth.speak(u);
-  return u;
-}
 
 type Props = {
   open: boolean;
@@ -51,7 +37,7 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
       setHint(null);
       setLastTranscript('');
       spokenForStepRef.current = -1;
-      window.speechSynthesis.cancel();
+      cancelSpeech();
       abortCapture();
       return;
     }
@@ -66,23 +52,25 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
     if (spokenForStepRef.current === stepIndex) return;
     spokenForStepRef.current = stepIndex;
     const t = window.setTimeout(() => {
-      const u = hablar(phrase.promptToSpeak);
-      u.onend = () => {
-        hablar('Pulse el micrófono, repita la frase, y pulse el cuadrado rojo cuando termine.');
-      };
+      // Solo el ejemplo de frase por voz; el resto está en pantalla para no mezclar TTS con el micrófono.
+      speakGuidance(phrase.promptToSpeak, { preset: 'calibration' });
     }, 500);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      cancelSpeech();
+    };
   }, [open, stepIndex, phrase]);
 
   if (!open || !phrase) return null;
 
   const onMic = async () => {
+    cancelSpeech();
     setHint(null);
     setLastTranscript('');
     const r = await startCapture();
     if (!r.ok) {
       setHint(r.message);
-      hablar(r.message);
+      speakGuidance(r.message, { preset: 'calibration' });
     }
   };
 
@@ -93,14 +81,14 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
     if (!text.trim()) {
       const msg = 'No se escuchó bien. Intente otra vez.';
       setHint(msg);
-      hablar(msg);
+      speakGuidance(msg, { preset: 'calibration' });
       return;
     }
     if (transcriptMatchesPhrase(text, phrase)) {
-      hablar('Muy bien.');
+      speakGuidance('Muy bien.', { preset: 'calibration' });
       if (stepIndex + 1 >= total) {
         markVoiceCalibrationComplete();
-        hablar('Calibración lista. Ya puede usar el punto de venta con la voz.');
+        speakGuidance('Calibración lista. Ya puede usar el punto de venta con la voz.', { preset: 'calibration' });
         window.setTimeout(() => onClose(), 2200);
       } else {
         setStepIndex((i) => i + 1);
@@ -110,15 +98,16 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
       const msg =
         'No coincidió del todo. Escuche otra vez el ejemplo y repita más claro, un poco más despacio.';
       setHint(msg);
-      hablar(msg);
+      speakGuidance(msg, { preset: 'calibration' });
     }
   };
 
   const onSkip = () => {
-    window.speechSynthesis.cancel();
+    cancelSpeech();
+    abortCapture();
     markVoiceCalibrationSkipped();
-    const u = hablar('Puede calibrar la voz más tarde en la sección Sesión.');
-    u.onend = () => onClose();
+    // Cerrar de inmediato: en muchos móviles `utterance.onend` no es fiable tras omitir.
+    onClose();
   };
 
   return (

@@ -3,6 +3,7 @@ import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { openDebugConsole } from '../lib/debugConsole';
+import { speakGuidance } from '../lib/voiceOutput';
 import './LoginView.scss';
 
 const LOGIN_TIMEOUT_MS = 15_000;
@@ -35,16 +36,15 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      const synth = window.speechSynthesis;
-      synth.cancel();
-      const u = new SpeechSynthesisUtterance(
-        'Pantalla de inicio de sesión. Pida ayuda a alguien para ingresar su correo y contraseña.'
+      speakGuidance(
+        'Pantalla de inicio de sesión. Pida ayuda a alguien para ingresar su correo y contraseña.',
+        { preset: 'login' }
       );
-      u.lang = 'es-MX';
-      u.rate = 1.0;
-      synth.speak(u);
     }, 600);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.speechSynthesis.cancel();
+    };
   }, []);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {

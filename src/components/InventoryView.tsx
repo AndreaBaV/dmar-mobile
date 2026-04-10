@@ -4,6 +4,7 @@ import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacito
 import type { Product } from '../types/Product';
 import { ProductService } from '../services/productService';
 import { startNativeSpeechSession, type NativeSpeechSession } from '../lib/nativeSpeechSession';
+import { productImageUrl } from '../utils/cartUtils';
 import './InventoryView.scss';
 
 type BrowserSpeechRecognition = {
@@ -247,23 +248,33 @@ export function InventoryView({ products, catalogoListo }: Props) {
             {filtered.map((p) => {
               const total = ProductService.getTotalStock(p);
               const lines = variantStockLine(p);
+              const img = productImageUrl(p);
               return (
                 <li key={p.id} className="inventory-item">
-                  <div className="inventory-item-head">
-                    <span className="inventory-name">{p.name}</span>
-                    <span className={`inventory-stock-badge ${total > 0 ? 'ok' : 'empty'}`}>
-                      {total > 0 ? `${total} u.` : 'Sin stock'}
-                    </span>
+                  <div className="inventory-item-thumb-wrap">
+                    {img ? (
+                      <img src={img} alt="" className="inventory-item-thumb" />
+                    ) : (
+                      <div className="inventory-item-thumb-placeholder" aria-hidden />
+                    )}
                   </div>
-                  <div className="inventory-category">{p.category}</div>
-                  <ul className="inventory-variants">
-                    {lines.map((line) => (
-                      <li key={line.key} className={line.stock > 0 ? 'has-stock' : ''}>
-                        <span>{line.label}</span>
-                        <span className="inventory-variant-stock">{line.stock}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="inventory-item-content">
+                    <div className="inventory-item-head">
+                      <span className="inventory-name">{p.name}</span>
+                      <span className={`inventory-stock-badge ${total > 0 ? 'ok' : 'empty'}`}>
+                        {total > 0 ? `${total} u.` : 'Sin stock'}
+                      </span>
+                    </div>
+                    <div className="inventory-category">{p.category}</div>
+                    <ul className="inventory-variants">
+                      {lines.map((line) => (
+                        <li key={line.key} className={line.stock > 0 ? 'has-stock' : ''}>
+                          <span>{line.label}</span>
+                          <span className="inventory-variant-stock">{line.stock}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </li>
               );
             })}

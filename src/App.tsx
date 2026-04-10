@@ -20,8 +20,15 @@ import { LoginView } from './components/LoginView';
 import { InventoryView } from './components/InventoryView';
 import { VoiceCalibrationModal } from './components/VoiceCalibrationModal';
 import { AddProductModal } from './components/AddProductModal';
+import { VoiceAmbiguousPickModal } from './components/VoiceAmbiguousPickModal';
 import { shouldShowVoiceCalibrationOnboarding } from './lib/voiceCalibrationStorage';
-import { mergeCartLines, productImageUrl, type CartLine } from './utils/cartUtils';
+import { getVoiceVolume, setVoiceVolume, speakGuidance } from './lib/voiceOutput';
+import {
+  mergeCartLinesRespectingStock,
+  productImageUrl,
+  stockAvailableFor,
+  type CartLine,
+} from './utils/cartUtils';
 import './App.scss';
 
 const MicIcon = () => (
@@ -70,6 +77,13 @@ const PlusIcon = () => (
 
 type MainTab = 'ventas' | 'inventario' | 'sesion';
 
+type VoiceAmbiguityState = {
+  current: { candidates: Product[]; quantity: number };
+  pendingAmbiguous: Array<{ candidates: Product[]; quantity: number }>;
+  accumulated: CartLine[];
+  advertencias: string;
+};
+
 /** API Web Speech del navegador (no confundir con Capacitor). */
 type BrowserSpeechRecognition = {
   lang: string;
@@ -100,12 +114,17 @@ function App() {
   const [carritoReal, setCarritoReal] = useState<CartLine[]>([]);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
   const [voiceCalibrationOpen, setVoiceCalibrationOpen] = useState(false);
+  const [voiceVolume, setVoiceVolumeState] = useState(() => getVoiceVolume());
   const [addProductOpen, setAddProductOpen] = useState(false);
+  const [voiceAmbiguity, setVoiceAmbiguity] = useState<VoiceAmbiguityState | null>(null);
+  const [ticketImagePreview, setTicketImagePreview] = useState<{ url: string; label: string } | null>(null);
 
   const totalCarrito = useMemo(
     () => carritoReal.reduce((s, it) => s + it.price * it.quantity, 0),
     [carritoReal]
   );
+
+  const getProductById = (id: string) => productList.find((p) => p.id === id);
 
   const nativeSpeechSessionRef = useRef<NativeSpeechSession | null>(null);
   const browserRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -224,21 +243,30 @@ function App() {
     }
   }, [authUser, catalogoListo]);
 
+  useEffect(() => {
+    if (mainTab === 'sesion') setVoiceVolumeState(getVoiceVolume());
+  }, [mainTab]);
+
+  useEffect(() => {
+    if (!ticketImagePreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTicketImagePreview(null);
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [ticketImagePreview]);
+
+  useEffect(() => {
+    if (carritoReal.length === 0) setTicketImagePreview(null);
+  }, [carritoReal.length]);
+
   const hablar = (texto: string) => {
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    const utterThis = new SpeechSynthesisUtterance(texto);
-    const voces = synth.getVoices();
-    const vozMujer = voces.find(v =>
-      (v.name.includes('Sabina') || v.name.includes('Paulina')) ||
-      (v.name.includes('Google') && v.lang.includes('es')) ||
-      ((v.lang === 'es-MX' || v.lang === 'es_MX') && v.name.includes('Female'))
-    );
-    if (vozMujer) utterThis.voice = vozMujer;
-    utterThis.lang = 'es-MX';
-    utterThis.rate = 1.05;
-    utterThis.pitch = 1.0;
-    synth.speak(utterThis);
+    speakGuidance(texto, { preset: 'app' });
   };
 
   const mensajeConVoz = (texto: string) => {
@@ -256,42 +284,67 @@ function App() {
         return;
       }
 
-      const itemsEncontrados: CartLine[] = [];
+      const definiteLines: CartLine[] = [];
+      const ambiguities: Array<{ candidates: Product[]; quantity: number }> = [];
       let advertencias = '';
 
       for (const itemIA of respuestaIA.items) {
-        const match = InventoryMatcher.findProduct(itemIA);
-        if (!match) {
+        const r = InventoryMatcher.resolveVoiceItem(itemIA);
+        if (r.status === 'not_found') {
           advertencias += `Producto "${itemIA.producto}" no encontrado. `;
           continue;
         }
-        if (match.error === 'variant_not_found') {
-          advertencias += `Sin stock para ${match.product.name} en ${itemIA.color} talla ${itemIA.talla}. `;
+        if (r.status === 'variant_not_found') {
+          advertencias += `Sin variante para ${r.product.name}${itemIA.color ? ` color ${itemIA.color}` : ''}${itemIA.talla ? ` talla ${itemIA.talla}` : ''}. `;
           continue;
         }
-        const itemReal: CartLine = {
-          productId: match.product.id,
-          name: match.product.name,
-          price: match.price,
+        if (r.status === 'ambiguous') {
+          ambiguities.push({ candidates: r.candidates, quantity: itemIA.cantidad || 1 });
+          continue;
+        }
+        definiteLines.push({
+          productId: r.product.id,
+          name: r.product.name,
+          price: r.price,
           quantity: itemIA.cantidad || 1,
-          variant: match.variant,
-          imageUrl: productImageUrl(match.product),
-        };
-        itemsEncontrados.push(itemReal);
+          variant: r.variant,
+          imageUrl: productImageUrl(r.product),
+        });
       }
 
-      if (itemsEncontrados.length > 0) {
+      if (ambiguities.length > 0) {
+        const [first, ...rest] = ambiguities;
+        setVoiceAmbiguity({
+          current: first,
+          pendingAmbiguous: rest,
+          accumulated: definiteLines,
+          advertencias,
+        });
+        setMensaje('Varias opciones: elija en pantalla.');
+        mensajeConVoz(
+          'Hay varias opciones de producto. Toque la foto del artículo correcto. Luego elija color y talla si se pide.'
+        );
+        return;
+      }
+
+      if (definiteLines.length > 0) {
         setCarritoReal((prev) => {
-          const merged = mergeCartLines(prev, itemsEncontrados);
-          const nuevoTotal = merged.reduce((s, i) => s + i.price * i.quantity, 0);
+          const { lines, adjustments } = mergeCartLinesRespectingStock(
+            prev,
+            definiteLines,
+            getProductById
+          );
+          const nuevoTotal = lines.reduce((s, i) => s + i.price * i.quantity, 0);
+          const stockNote = adjustments.join(' ');
+          const fullAdv = [advertencias.trim(), stockNote].filter(Boolean).join(' ');
           queueMicrotask(() => {
             const resumen = `Productos agregados al ticket. Total: ${nuevoTotal} pesos. ¿Desea confirmar la venta?`;
-            mensajeConVoz(advertencias ? `${resumen} Atención: ${advertencias}` : resumen);
+            mensajeConVoz(fullAdv ? `${resumen} Atención: ${fullAdv}` : resumen);
           });
-          return merged;
+          return lines;
         });
       } else {
-        mensajeConVoz(advertencias || 'No entendí la solicitud.');
+        mensajeConVoz(advertencias.trim() || 'No entendí la solicitud.');
       }
     } catch (error) {
       console.error(error);
@@ -304,7 +357,7 @@ function App() {
       alert('El catálogo aún se está cargando.');
       return;
     }
-    if (estaEscuchando || procesandoVenta) return;
+    if (estaEscuchando || procesandoVenta || voiceAmbiguity) return;
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -489,14 +542,90 @@ function App() {
       if (!it) return prev;
       const q = it.quantity + delta;
       if (q <= 0) return prev.filter((_, i) => i !== index);
+      const p = getProductById(it.productId);
+      if (p) {
+        const max = stockAvailableFor(p, it.variant);
+        if (Number.isFinite(max) && q > max) {
+          if (max <= 0) return prev.filter((_, i) => i !== index);
+          next[index] = { ...it, quantity: max };
+          queueMicrotask(() =>
+            mensajeConVoz(`Solo hay ${max} unidades disponibles de ${it.name}.`)
+          );
+          return next;
+        }
+      }
       next[index] = { ...it, quantity: q };
       return next;
     });
   };
 
   const agregarLineaDesdeCatalogo = (line: CartLine) => {
-    setCarritoReal((prev) => mergeCartLines(prev, [line]));
-    setMensaje('Producto agregado al ticket.');
+    setCarritoReal((prev) => {
+      const { lines, adjustments } = mergeCartLinesRespectingStock(prev, [line], getProductById);
+      const note = adjustments.join(' ');
+      queueMicrotask(() => {
+        setMensaje(note || 'Producto agregado al ticket.');
+        if (note) mensajeConVoz(note);
+        else mensajeConVoz('Producto agregado al ticket.');
+      });
+      return lines;
+    });
+  };
+
+  const handleVoiceAmbiguityPick = (line: CartLine) => {
+    setVoiceAmbiguity((prev) => {
+      if (!prev) return null;
+      const acc = [...prev.accumulated, line];
+      const adv = prev.advertencias;
+      if (prev.pendingAmbiguous.length > 0) {
+        const [next, ...rest] = prev.pendingAmbiguous;
+        queueMicrotask(() => hablar('Elija el siguiente producto.'));
+        return {
+          current: next,
+          pendingAmbiguous: rest,
+          accumulated: acc,
+          advertencias: adv,
+        };
+      }
+      queueMicrotask(() => {
+        setCarritoReal((p0) => {
+          const { lines, adjustments } = mergeCartLinesRespectingStock(p0, acc, getProductById);
+          const nuevoTotal = lines.reduce((s, i) => s + i.price * i.quantity, 0);
+          const resumen = `Productos agregados al ticket. Total: ${nuevoTotal} pesos. ¿Desea confirmar la venta?`;
+          const fullAdv = [adv, ...adjustments].filter(Boolean).join(' ');
+          mensajeConVoz(fullAdv.trim() ? `${resumen} Atención: ${fullAdv}` : resumen);
+          return lines;
+        });
+      });
+      return null;
+    });
+  };
+
+  const handleVoiceAmbiguityCancel = () => {
+    setVoiceAmbiguity((prev) => {
+      if (!prev) return null;
+      const acc = prev.accumulated;
+      const adv = prev.advertencias;
+      queueMicrotask(() => {
+        if (acc.length > 0) {
+          setCarritoReal((p0) => {
+            const { lines, adjustments } = mergeCartLinesRespectingStock(p0, acc, getProductById);
+            const nuevoTotal = lines.reduce((s, i) => s + i.price * i.quantity, 0);
+            const stockNote = adjustments.join(' ');
+            const tail = [adv.trim(), stockNote].filter(Boolean).join(' ');
+            mensajeConVoz(
+              `Se agregaron solo los productos ya identificados. Total: ${nuevoTotal} pesos.${tail ? ` ${tail}` : ''}`
+            );
+            return lines;
+          });
+        } else {
+          mensajeConVoz(
+            'No se agregó ese producto. Diga el nombre más completo, o el color y la talla, o elija con fotos en agregar producto.'
+          );
+        }
+      });
+      return null;
+    });
   };
 
   if (!authChecked) {
@@ -545,7 +674,7 @@ function App() {
                       type="button"
                       className={`mic-button ${estaEscuchando ? 'listening' : ''}`}
                       onClick={() => void iniciarEscucha()}
-                      disabled={!catalogoListo || procesandoVenta || estaEscuchando}
+                      disabled={!catalogoListo || procesandoVenta || estaEscuchando || voiceAmbiguity !== null}
                       aria-label="Toque para hablar"
                     >
                       <MicIcon />
@@ -572,15 +701,18 @@ function App() {
               </div>
 
               {carritoReal.length === 0 && catalogoListo ? (
-                <button
-                  type="button"
-                  className="order-add-product-btn order-add-product-btn--solo"
-                  onClick={() => setAddProductOpen(true)}
-                  disabled={procesandoVenta}
-                >
-                  <PlusCircleIcon />
-                  <span>Agregar producto con fotos</span>
-                </button>
+                <div className="add-product-hero glass-card">
+                  <button
+                    type="button"
+                    className="add-product-hero__btn"
+                    onClick={() => setAddProductOpen(true)}
+                    disabled={procesandoVenta}
+                    aria-label="Agregar producto con fotos"
+                  >
+                    <PlusCircleIcon />
+                  </button>
+                  <span className="add-product-hero__label">Agregar producto con fotos</span>
+                </div>
               ) : null}
 
               {carritoReal.length > 0 && (
@@ -601,13 +733,20 @@ function App() {
                   <div className="items-list">
                     {carritoReal.map((it, i) => (
                       <div key={`${it.productId}-${it.variant?.color ?? ''}-${it.variant?.size ?? ''}-${i}`} className="item-row">
-                        <div className="item-thumb-wrap">
-                          {it.imageUrl ? (
+                        {it.imageUrl ? (
+                          <button
+                            type="button"
+                            className="item-thumb-wrap item-thumb-wrap--clickable"
+                            onClick={() => setTicketImagePreview({ url: it.imageUrl!, label: it.name })}
+                            aria-label={`Ampliar imagen: ${it.name}`}
+                          >
                             <img src={it.imageUrl} alt="" className="item-thumb" />
-                          ) : (
+                          </button>
+                        ) : (
+                          <div className="item-thumb-wrap">
                             <div className="item-thumb-placeholder" aria-hidden />
-                          )}
-                        </div>
+                          </div>
+                        )}
                         <div className="item-body">
                           <div className="item-info">
                             <span className="item-name">{it.name}</span>
@@ -676,8 +815,17 @@ function App() {
               <AddProductModal
                 open={addProductOpen}
                 products={productList}
+                catalogoListo={catalogoListo}
                 onClose={() => setAddProductOpen(false)}
                 onAddLine={agregarLineaDesdeCatalogo}
+              />
+
+              <VoiceAmbiguousPickModal
+                open={voiceAmbiguity !== null}
+                candidates={voiceAmbiguity?.current.candidates ?? []}
+                quantity={voiceAmbiguity?.current.quantity ?? 1}
+                onPick={handleVoiceAmbiguityPick}
+                onCancel={handleVoiceAmbiguityCancel}
               />
 
               <div className="print-only" />
@@ -697,6 +845,42 @@ function App() {
                 <br />
                 <strong>{formatSessionExpiry()}</strong>
               </p>
+              <div className="session-voice-settings">
+                <label className="session-voice-label" htmlFor="session-voice-volume">
+                  Volumen de mensajes por voz
+                </label>
+                <input
+                  id="session-voice-volume"
+                  type="range"
+                  className="session-voice-range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(voiceVolume * 100)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) / 100;
+                    setVoiceVolume(v);
+                    setVoiceVolumeState(v);
+                  }}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(voiceVolume * 100)}
+                  aria-valuetext={`${Math.round(voiceVolume * 100)} por ciento`}
+                />
+                <p className="session-voice-value">{Math.round(voiceVolume * 100)}%</p>
+                <p className="session-voice-hint">
+                  Ajuste si los avisos se oyen muy bajos o el teléfono envía el audio al auricular de llamadas: suba este control y también el volumen de multimedia del dispositivo.
+                </p>
+                <button
+                  type="button"
+                  className="session-btn session-btn--secondary session-btn--compact"
+                  onClick={() => {
+                    speakGuidance('Así se oirán los mensajes de voz en el punto de venta.', { preset: 'app' });
+                  }}
+                >
+                  Probar voz
+                </button>
+              </div>
               <button type="button" className="session-btn session-btn--secondary" onClick={() => void openDebugConsole()}>
                 Abrir consola de logs
               </button>
@@ -724,6 +908,37 @@ function App() {
           <UserIcon /><span>Sesión</span>
         </button>
       </nav>
+
+      {ticketImagePreview ? (
+        <div
+          className="ticket-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Imagen ampliada del producto"
+          onClick={() => setTicketImagePreview(null)}
+        >
+          <button
+            type="button"
+            className="ticket-image-lightbox__close"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTicketImagePreview(null);
+            }}
+            aria-label="Cerrar vista ampliada"
+          >
+            <XIcon />
+          </button>
+          <div className="ticket-image-lightbox__inner" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={ticketImagePreview.url}
+              alt={ticketImagePreview.label}
+              className="ticket-image-lightbox__img"
+              decoding="async"
+            />
+            <p className="ticket-image-lightbox__caption">{ticketImagePreview.label}</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
