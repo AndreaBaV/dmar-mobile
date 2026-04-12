@@ -192,14 +192,14 @@ body {
 
 .tab-bar__btn {
   flex: 1;
-  max-width: 120px;
+  max-width: 96px;
   min-height: 52px;
-  padding: 6px 8px 8px;
+  padding: 6px 4px 8px;
   border: none;
   border-radius: 12px;
   background: transparent;
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
@@ -237,6 +237,19 @@ body {
   font-size: 1.15rem;
 }
 
+.session-role-pill {
+  margin: 0;
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
+}
+
 .session-email {
   margin: 0;
   font-size: 0.95rem;
@@ -249,6 +262,76 @@ body {
   font-size: 0.85rem;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.session-subheading {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  text-align: left;
+}
+
+.session-voice-modules {
+  text-align: left;
+  padding: 14px 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-voice-module-intro {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.session-voice-module-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  touch-action: manipulation;
+  text-align: left;
+
+  &:active {
+    background: rgba(14, 165, 233, 0.08);
+  }
+}
+
+.session-voice-module-check {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--primary-blue, #0ea5e9);
+  cursor: pointer;
+}
+
+.session-voice-module-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-voice-module-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.session-voice-module-desc {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 .session-voice-settings {
@@ -305,6 +388,11 @@ body {
   cursor: pointer;
   min-height: 52px;
   touch-action: manipulation;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   &--secondary {
     background: rgba(14, 165, 233, 0.15);
@@ -369,6 +457,15 @@ body {
     color: var(--text-secondary);
     font-weight: 500;
     margin: 0;
+  }
+
+  .subtitle-role {
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #6366f1);
+    font-weight: 700;
+    margin: 6px 0 0;
   }
 }
 

@@ -1,6 +1,11 @@
 /** Volumen y reproducción de mensajes por voz (Web Speech API). */
 
+import type { VoiceModuleId } from './voiceModuleSettings';
+import { isVoiceEnabledFor } from './voiceModuleSettings';
+
 const STORAGE_KEY_VOLUME = 'dmar_voice_volume';
+
+export type { VoiceModuleId } from './voiceModuleSettings';
 
 export function getVoiceVolume(): number {
   if (typeof window === 'undefined') return 1;
@@ -56,6 +61,8 @@ export type VoiceOutputPreset = 'app' | 'calibration' | 'login';
 
 export type SpeakGuidanceOptions = {
   preset?: VoiceOutputPreset;
+  /** Si se indica, no hay locución cuando ese módulo está desactivado en configuración. */
+  module?: VoiceModuleId;
   rate?: number;
   pitch?: number;
   lang?: string;
@@ -68,6 +75,9 @@ export type SpeakGuidanceOptions = {
  */
 export function speakGuidance(text: string, options?: SpeakGuidanceOptions): SpeechSynthesisUtterance | null {
   if (typeof window === 'undefined' || !text.trim()) return null;
+  if (options?.module != null && !isVoiceEnabledFor(options.module)) {
+    return null;
+  }
   const synth = window.speechSynthesis;
   if (!synth) return null;
 

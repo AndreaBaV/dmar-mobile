@@ -1,0 +1,220 @@
+.sales-hist {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 0 12px 100px;
+  box-sizing: border-box;
+}
+
+.sales-hist-filters {
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sales-hist-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #64748b);
+}
+
+.sales-hist-input,
+.sales-hist-select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.sales-hist-input--date {
+  padding: 10px 12px;
+}
+
+.sales-hist-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sales-hist-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sales-hist-mini-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #64748b);
+}
+
+.sales-hist-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sales-hist-chip {
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #334155;
+
+  &.active {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.12);
+    color: #4338ca;
+  }
+
+  &--danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #b91c1c;
+  }
+}
+
+.sales-hist-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #475569;
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.sales-hist-count {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #64748b);
+}
+
+.sales-hist-error {
+  margin: 0;
+  color: #b91c1c;
+  text-align: center;
+  padding: 24px;
+}
+
+.sales-hist-loading,
+.sales-hist-empty {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--text-secondary, #64748b);
+}
+
+.sales-hist-spinner {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 12px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: sales-hist-spin 0.8s linear infinite;
+}
+
+@keyframes sales-hist-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sales-hist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sales-hist-card {
+  width: 100%;
+  text-align: left;
+  border: none;
+  cursor: pointer;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font: inherit;
+  transition: transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.99);
+  }
+}
+
+.sales-hist-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.sales-hist-id {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.sales-hist-total {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #6366f1;
+}
+
+.sales-hist-card-mid {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.sales-hist-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.sales-hist-client {
+  color: #334155;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 75%;
+}
+
+.sales-hist-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.sales-hist-hint {
+  margin: 16px 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.4;
+  min-height: 2.8em;
+}

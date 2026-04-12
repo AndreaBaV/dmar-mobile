@@ -8,6 +8,8 @@ import { consultarAMar } from './services/marService';
 import { InventoryMatcher } from './services/inventoryMatcher';
 import { SaleService } from './services/saleService';
 import { auth } from './firebase/config';
+import { loadUserProfile } from './services/userProfileService';
+import type { UserRole } from './types/User';
 import type { Product } from './types/Product';
 import {
   renewWeeklySession,
@@ -18,11 +20,18 @@ import {
 import { openDebugConsole } from './lib/debugConsole';
 import { LoginView } from './components/LoginView';
 import { InventoryView } from './components/InventoryView';
+import { SalesHistoryView } from './components/SalesHistoryView';
 import { VoiceCalibrationModal } from './components/VoiceCalibrationModal';
 import { AddProductModal } from './components/AddProductModal';
 import { VoiceAmbiguousPickModal } from './components/VoiceAmbiguousPickModal';
 import { shouldShowVoiceCalibrationOnboarding } from './lib/voiceCalibrationStorage';
 import { getVoiceVolume, setVoiceVolume, speakGuidance } from './lib/voiceOutput';
+import {
+  getVoiceModuleSettings,
+  setVoiceModuleSettings,
+  VOICE_MODULE_LABELS,
+  type VoiceModuleId,
+} from './lib/voiceModuleSettings';
 import {
   mergeCartLinesRespectingStock,
   productImageUrl,
@@ -74,8 +83,17 @@ const MinusIcon = () => (
 const PlusIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
 );
+const HistoryIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </svg>
+);
 
-type MainTab = 'ventas' | 'inventario' | 'sesion';
+type MainTab = 'ventas' | 'inventario' | 'historial' | 'sesion';
 
 type VoiceAmbiguityState = {
   current: { candidates: Product[]; quantity: number };
@@ -115,9 +133,15 @@ function App() {
   const [procesandoVenta, setProcesandoVenta] = useState(false);
   const [voiceCalibrationOpen, setVoiceCalibrationOpen] = useState(false);
   const [voiceVolume, setVoiceVolumeState] = useState(() => getVoiceVolume());
+  const [voiceModules, setVoiceModules] = useState(() => getVoiceModuleSettings());
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [voiceAmbiguity, setVoiceAmbiguity] = useState<VoiceAmbiguityState | null>(null);
   const [ticketImagePreview, setTicketImagePreview] = useState<{ url: string; label: string } | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('cashier');
+  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
+
+  const isAdmin = userRole === 'admin';
 
   const totalCarrito = useMemo(
     () => carritoReal.reduce((s, it) => s + it.price * it.quantity, 0),
@@ -197,9 +221,55 @@ function App() {
 
   useEffect(() => {
     if (!authUser) {
+      setProfileChecked(false);
+      setUserRole('cashier');
+      setUserDisplayName(null);
+      return;
+    }
+
+    let cancelled = false;
+    setProfileChecked(false);
+
+    void (async () => {
+      try {
+        const result = await loadUserProfile(authUser.uid);
+        if (cancelled) return;
+        if (!result.ok) {
+          clearWeeklySession();
+          await signOut(auth);
+          return;
+        }
+        setUserRole(result.role);
+        setUserDisplayName(result.name);
+        setProfileChecked(true);
+      } catch (e) {
+        console.error('[App] loadUserProfile', e);
+        if (cancelled) return;
+        setUserRole('cashier');
+        setUserDisplayName(null);
+        setProfileChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAddProductOpen(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!authUser) {
       setCatalogoListo(false);
       setProductList([]);
       setMensaje('Inicializando sistema...');
+      return;
+    }
+    if (!profileChecked) {
       return;
     }
 
@@ -231,7 +301,7 @@ function App() {
       }
     };
     void cargarDatos();
-  }, [authUser]);
+  }, [authUser, profileChecked]);
 
   useEffect(() => {
     if (!authUser) {
@@ -244,8 +314,16 @@ function App() {
   }, [authUser, catalogoListo]);
 
   useEffect(() => {
-    if (mainTab === 'sesion') setVoiceVolumeState(getVoiceVolume());
+    if (mainTab !== 'sesion') return;
+    setVoiceVolumeState(getVoiceVolume());
+    setVoiceModules(getVoiceModuleSettings());
   }, [mainTab]);
+
+  useEffect(() => {
+    const sync = () => setVoiceModules(getVoiceModuleSettings());
+    window.addEventListener('dmar-voice-modules-changed', sync);
+    return () => window.removeEventListener('dmar-voice-modules-changed', sync);
+  }, []);
 
   useEffect(() => {
     if (!ticketImagePreview) return;
@@ -266,7 +344,7 @@ function App() {
   }, [carritoReal.length]);
 
   const hablar = (texto: string) => {
-    speakGuidance(texto, { preset: 'app' });
+    speakGuidance(texto, { preset: 'app', module: 'ventas' });
   };
 
   const mensajeConVoz = (texto: string) => {
@@ -649,6 +727,15 @@ function App() {
     );
   }
 
+  if (!profileChecked) {
+    return (
+      <div className="layout-container layout-container--centered">
+        <div className="bg-gradient" />
+        <p className="boot-message">Cargando perfil…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="layout-container">
       <div className="bg-gradient" />
@@ -660,6 +747,7 @@ function App() {
             <span className="logo-text">D&apos;MAR</span>
           </div>
           <p className="subtitle">POS INTELLIGENCE</p>
+          <p className="subtitle-role">{isAdmin ? 'Administrador' : 'Cajero'}</p>
         </div>
       </header>
 
@@ -700,7 +788,7 @@ function App() {
                 </div>
               </div>
 
-              {carritoReal.length === 0 && catalogoListo ? (
+              {isAdmin && carritoReal.length === 0 && catalogoListo ? (
                 <div className="add-product-hero glass-card">
                   <button
                     type="button"
@@ -721,15 +809,17 @@ function App() {
                     <h3>Ticket</h3>
                     <span className="order-date">{new Date().toLocaleDateString()}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="order-add-product-btn"
-                    onClick={() => setAddProductOpen(true)}
-                    disabled={!catalogoListo || procesandoVenta}
-                  >
-                    <PlusCircleIcon />
-                    <span>Agregar producto</span>
-                  </button>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="order-add-product-btn"
+                      onClick={() => setAddProductOpen(true)}
+                      disabled={!catalogoListo || procesandoVenta}
+                    >
+                      <PlusCircleIcon />
+                      <span>Agregar producto</span>
+                    </button>
+                  ) : null}
                   <div className="items-list">
                     {carritoReal.map((it, i) => (
                       <div key={`${it.productId}-${it.variant?.color ?? ''}-${it.variant?.size ?? ''}-${i}`} className="item-row">
@@ -812,13 +902,15 @@ function App() {
                 </div>
               )}
 
-              <AddProductModal
-                open={addProductOpen}
-                products={productList}
-                catalogoListo={catalogoListo}
-                onClose={() => setAddProductOpen(false)}
-                onAddLine={agregarLineaDesdeCatalogo}
-              />
+              {isAdmin ? (
+                <AddProductModal
+                  open={addProductOpen}
+                  products={productList}
+                  catalogoListo={catalogoListo}
+                  onClose={() => setAddProductOpen(false)}
+                  onAddLine={agregarLineaDesdeCatalogo}
+                />
+              ) : null}
 
               <VoiceAmbiguousPickModal
                 open={voiceAmbiguity !== null}
@@ -836,15 +928,44 @@ function App() {
             <InventoryView products={productList} catalogoListo={catalogoListo} />
           )}
 
+          {mainTab === 'historial' && <SalesHistoryView isAdmin={isAdmin} />}
+
           {mainTab === 'sesion' && (
             <div className="session-panel glass-card">
               <h3 className="session-title">Sesión</h3>
-              <p className="session-email">{authUser.email ?? 'Usuario'}</p>
+              <p className="session-role-pill">{isAdmin ? 'Administrador' : 'Cajero'}</p>
+              <p className="session-email">{userDisplayName || authUser.email || 'Usuario'}</p>
               <p className="session-expiry">
                 Volverá a pedir inicio de sesión después del:
                 <br />
                 <strong>{formatSessionExpiry()}</strong>
               </p>
+
+              <div className="session-voice-modules">
+                <h4 className="session-subheading">Asistente de voz por módulo</h4>
+                <p className="session-voice-module-intro">
+                  Desactive los mensajes hablados donde no los necesite. Los avisos en texto en pantalla no cambian.
+                </p>
+                {(['login', 'ventas', 'calibracion'] as const).map((id: VoiceModuleId) => (
+                  <label key={id} className="session-voice-module-row">
+                    <input
+                      type="checkbox"
+                      className="session-voice-module-check"
+                      checked={voiceModules[id]}
+                      onChange={() => {
+                        const cur = getVoiceModuleSettings();
+                        setVoiceModuleSettings({ [id]: !cur[id] });
+                        setVoiceModules(getVoiceModuleSettings());
+                      }}
+                    />
+                    <span className="session-voice-module-text">
+                      <span className="session-voice-module-title">{VOICE_MODULE_LABELS[id].title}</span>
+                      <span className="session-voice-module-desc">{VOICE_MODULE_LABELS[id].description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
               <div className="session-voice-settings">
                 <label className="session-voice-label" htmlFor="session-voice-volume">
                   Volumen de mensajes por voz
@@ -874,16 +995,27 @@ function App() {
                 <button
                   type="button"
                   className="session-btn session-btn--secondary session-btn--compact"
+                  disabled={!voiceModules.ventas}
+                  title={
+                    voiceModules.ventas
+                      ? undefined
+                      : 'Active «Punto de venta» arriba para poder probar la voz.'
+                  }
                   onClick={() => {
-                    speakGuidance('Así se oirán los mensajes de voz en el punto de venta.', { preset: 'app' });
+                    speakGuidance('Así se oirán los mensajes de voz en el punto de venta.', {
+                      preset: 'app',
+                      module: 'ventas',
+                    });
                   }}
                 >
                   Probar voz
                 </button>
               </div>
-              <button type="button" className="session-btn session-btn--secondary" onClick={() => void openDebugConsole()}>
-                Abrir consola de logs
-              </button>
+              {isAdmin ? (
+                <button type="button" className="session-btn session-btn--secondary" onClick={() => void openDebugConsole()}>
+                  Abrir consola de logs
+                </button>
+              ) : null}
               <button type="button" className="session-btn session-btn--secondary" onClick={() => setVoiceCalibrationOpen(true)}>
                 Práctica de reconocimiento de voz
               </button>
@@ -903,6 +1035,9 @@ function App() {
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'inventario' ? 'active' : ''}`} onClick={() => setMainTab('inventario')}>
           <BoxIcon /><span>Inventario</span>
+        </button>
+        <button type="button" className={`tab-bar__btn ${mainTab === 'historial' ? 'active' : ''}`} onClick={() => setMainTab('historial')}>
+          <HistoryIcon /><span>Historial</span>
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'sesion' ? 'active' : ''}`} onClick={() => setMainTab('sesion')}>
           <UserIcon /><span>Sesión</span>

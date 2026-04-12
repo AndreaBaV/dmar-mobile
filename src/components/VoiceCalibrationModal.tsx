@@ -53,7 +53,7 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
     spokenForStepRef.current = stepIndex;
     const t = window.setTimeout(() => {
       // Solo el ejemplo de frase por voz; el resto está en pantalla para no mezclar TTS con el micrófono.
-      speakGuidance(phrase.promptToSpeak, { preset: 'calibration' });
+      speakGuidance(phrase.promptToSpeak, { preset: 'calibration', module: 'calibracion' });
     }, 500);
     return () => {
       window.clearTimeout(t);
@@ -70,7 +70,7 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
     const r = await startCapture();
     if (!r.ok) {
       setHint(r.message);
-      speakGuidance(r.message, { preset: 'calibration' });
+      speakGuidance(r.message, { preset: 'calibration', module: 'calibracion' });
     }
   };
 
@@ -81,14 +81,17 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
     if (!text.trim()) {
       const msg = 'No se escuchó bien. Intente otra vez.';
       setHint(msg);
-      speakGuidance(msg, { preset: 'calibration' });
+      speakGuidance(msg, { preset: 'calibration', module: 'calibracion' });
       return;
     }
     if (transcriptMatchesPhrase(text, phrase)) {
-      speakGuidance('Muy bien.', { preset: 'calibration' });
+      speakGuidance('Muy bien.', { preset: 'calibration', module: 'calibracion' });
       if (stepIndex + 1 >= total) {
         markVoiceCalibrationComplete();
-        speakGuidance('Calibración lista. Ya puede usar el punto de venta con la voz.', { preset: 'calibration' });
+        speakGuidance('Calibración lista. Ya puede usar el punto de venta con la voz.', {
+          preset: 'calibration',
+          module: 'calibracion',
+        });
         window.setTimeout(() => onClose(), 2200);
       } else {
         setStepIndex((i) => i + 1);
@@ -98,7 +101,7 @@ export function VoiceCalibrationModal({ open, onClose }: Props) {
       const msg =
         'No coincidió del todo. Escuche otra vez el ejemplo y repita más claro, un poco más despacio.';
       setHint(msg);
-      speakGuidance(msg, { preset: 'calibration' });
+      speakGuidance(msg, { preset: 'calibration', module: 'calibracion' });
     }
   };
 

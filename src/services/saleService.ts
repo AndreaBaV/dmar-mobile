@@ -340,6 +340,47 @@ export class SaleService {
     }
   }
 
+  /**
+   * Misma plantilla que el ticket por correo; sirve para reimprimir desde el historial (p. ej. solo admin en móvil).
+   */
+  static getPrintableTicketHtmlForSale(sale: {
+    id: string;
+    items: Array<{
+      productId: string;
+      name: string;
+      price: number;
+      quantity: number;
+      variant?: { color: string; size: string; sku?: string };
+    }>;
+    total: number;
+    paymentMethod: PaymentMethod;
+    cashReceived?: string;
+    userName?: string;
+  }): string {
+    const cart: CartItem[] = sale.items.map((i) => ({
+      productId: i.productId,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+      variant: i.variant
+        ? {
+            color: i.variant.color,
+            size: i.variant.size,
+            stock: 0,
+            sku: i.variant.sku,
+          }
+        : undefined,
+    }));
+    return SaleService.generateTicketEmailHtml(
+      sale.id,
+      cart,
+      sale.total,
+      sale.cashReceived ?? sale.total.toFixed(2),
+      sale.paymentMethod,
+      sale.userName ?? 'Usuario'
+    );
+  }
+
   private static generateTicketEmailHtml(
     saleId: string,
     cart: CartItem[],
@@ -545,20 +586,4 @@ export class SaleService {
     `;
   }
 
-  static async getSalesHistory(limit: number = 50): Promise<SaleRecord[]> {
-    try {
-      const salesCollection = collection(db, 'sales');
-      const snapshot = await getDocs(salesCollection);
-      
-      const sales = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as SaleRecord & { id: string }))
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-        .slice(0, limit);
-
-      return sales;
-    } catch (error) {
-      console.error('Error obteniendo historial:', error);
-      return [];
-    }
-  }
 }

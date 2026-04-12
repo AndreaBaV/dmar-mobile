@@ -3,6 +3,7 @@ import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { openDebugConsole } from '../lib/debugConsole';
+import { isVoiceEnabledFor } from '../lib/voiceModuleSettings';
 import { speakGuidance } from '../lib/voiceOutput';
 import './LoginView.scss';
 
@@ -36,9 +37,10 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (!isVoiceEnabledFor('login')) return;
       speakGuidance(
         'Pantalla de inicio de sesión. Pida ayuda a alguien para ingresar su correo y contraseña.',
-        { preset: 'login' }
+        { preset: 'login', module: 'login' }
       );
     }, 600);
     return () => {
