@@ -18,8 +18,10 @@
     "@capacitor/cli": "^8.0.1",
     "@capacitor/core": "^8.0.1",
     "@capacitor/ios": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
     "@capgo/capacitor-speech-recognition": "^8.1.0",
     "@google/generative-ai": "^0.24.1",
+    "capacitor-thermal-printer": "^0.2.5",
     "firebase": "^12.8.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

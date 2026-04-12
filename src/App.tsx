@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
 import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacitor-speech-recognition';
 import { startNativeSpeechSession, type NativeSpeechSession } from './lib/nativeSpeechSession';
 import { consultarAMar } from './services/marService';
@@ -24,6 +25,8 @@ import { SalesHistoryView } from './components/SalesHistoryView';
 import { VoiceCalibrationModal } from './components/VoiceCalibrationModal';
 import { AddProductModal } from './components/AddProductModal';
 import { VoiceAmbiguousPickModal } from './components/VoiceAmbiguousPickModal';
+import { BluetoothPrinterPanel } from './components/BluetoothPrinterPanel';
+import { MasModuleHub, type MasStack } from './components/MasModuleHub';
 import { shouldShowVoiceCalibrationOnboarding } from './lib/voiceCalibrationStorage';
 import { getVoiceVolume, setVoiceVolume, speakGuidance } from './lib/voiceOutput';
 import {
@@ -38,6 +41,8 @@ import {
   stockAvailableFor,
   type CartLine,
 } from './utils/cartUtils';
+import { buildPlainTextTicket } from './lib/ticketText';
+import { tryPrintSaleTicket } from './services/bluetoothThermalPrint';
 import './App.scss';
 
 const MicIcon = () => (
@@ -92,8 +97,16 @@ const HistoryIcon = () => (
     <polyline points="10 9 9 9 8 9" />
   </svg>
 );
+const GridIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+  </svg>
+);
 
-type MainTab = 'ventas' | 'inventario' | 'historial' | 'sesion';
+type MainTab = 'ventas' | 'inventario' | 'historial' | 'mas' | 'sesion';
 
 type VoiceAmbiguityState = {
   current: { candidates: Product[]; quantity: number };
@@ -124,6 +137,7 @@ function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('ventas');
+  const [masStack, setMasStack] = useState<MasStack>('menu');
 
   const [estaEscuchando, setEstaEscuchando] = useState(false);
   const [mensaje, setMensaje] = useState('Inicializando sistema...');
@@ -317,6 +331,10 @@ function App() {
     if (mainTab !== 'sesion') return;
     setVoiceVolumeState(getVoiceVolume());
     setVoiceModules(getVoiceModuleSettings());
+  }, [mainTab]);
+
+  useEffect(() => {
+    if (mainTab !== 'mas') setMasStack('menu');
   }, [mainTab]);
 
   useEffect(() => {
@@ -572,24 +590,61 @@ function App() {
     if (carritoReal.length === 0) return;
     setProcesandoVenta(true);
     setMensaje('Autorizando transacción...');
+    const cashierName =
+      userDisplayName?.trim() || authUser?.email?.split('@')[0] || 'Cajero';
+    const cashStr = totalCarrito.toFixed(2);
+    const change = Math.max(0, parseFloat(cashStr) - totalCarrito);
     try {
-      await SaleService.processSale(
+      const saleId = await SaleService.processSale(
         carritoReal,
         totalCarrito,
         'cash',
-        totalCarrito.toString(),
+        cashStr,
         'contado',
         'Cliente Mostrador',
-        'Mar Asistente',
+        cashierName,
         false
       );
       mensajeConVoz('Transacción completada exitosamente.');
-      setTimeout(() => {
-        window.print();
+
+      const ticketParams = {
+        saleId,
+        lines: [...carritoReal],
+        total: totalCarrito,
+        cashReceived: cashStr,
+        change,
+        cashierName,
+        clientName: 'Cliente Mostrador',
+      };
+
+      const finishUi = () => {
         setCarritoReal([]);
         setProcesandoVenta(false);
         mensajeConVoz('Sistema listo. Toque el botón para hablar.');
-      }, 1000);
+      };
+
+      if (Capacitor.isNativePlatform()) {
+        setTimeout(async () => {
+          const printed = await tryPrintSaleTicket(ticketParams);
+          if (!printed) {
+            try {
+              await Share.share({
+                title: "Ticket D'Mar",
+                text: buildPlainTextTicket(ticketParams),
+                dialogTitle: 'Compartir ticket',
+              });
+            } catch {
+              /* usuario canceló o no hay handler */
+            }
+          }
+          finishUi();
+        }, 400);
+      } else {
+        setTimeout(() => {
+          window.print();
+          finishUi();
+        }, 1000);
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error(error);
@@ -930,6 +985,14 @@ function App() {
 
           {mainTab === 'historial' && <SalesHistoryView isAdmin={isAdmin} />}
 
+          {mainTab === 'mas' && (
+            <MasModuleHub
+              stack={masStack}
+              onNavigate={setMasStack}
+              cashierName={userDisplayName?.trim() || authUser.email?.split('@')[0] || 'Cajero'}
+            />
+          )}
+
           {mainTab === 'sesion' && (
             <div className="session-panel glass-card">
               <h3 className="session-title">Sesión</h3>
@@ -940,6 +1003,8 @@ function App() {
                 <br />
                 <strong>{formatSessionExpiry()}</strong>
               </p>
+
+              <BluetoothPrinterPanel />
 
               <div className="session-voice-modules">
                 <h4 className="session-subheading">Asistente de voz por módulo</h4>
@@ -1038,6 +1103,9 @@ function App() {
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'historial' ? 'active' : ''}`} onClick={() => setMainTab('historial')}>
           <HistoryIcon /><span>Historial</span>
+        </button>
+        <button type="button" className={`tab-bar__btn ${mainTab === 'mas' ? 'active' : ''}`} onClick={() => setMainTab('mas')}>
+          <GridIcon /><span>Más</span>
         </button>
         <button type="button" className={`tab-bar__btn ${mainTab === 'sesion' ? 'active' : ''}`} onClick={() => setMainTab('sesion')}>
           <UserIcon /><span>Sesión</span>

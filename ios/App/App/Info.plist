@@ -51,5 +51,7 @@
 	<string>Esta app usa reconocimiento de voz para procesar tus comandos de voz.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Esta app necesita acceso al micrófono para capturar audio y reconocer voz.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bluetooth se usa para conectar la impresora de tickets del punto de venta.</string>
 </dict>
 </plist>
