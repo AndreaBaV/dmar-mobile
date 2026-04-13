@@ -44,6 +44,27 @@ function dateInputToLocalDay(ymd: string): Date {
   return new Date(y, m - 1, d);
 }
 
+function todayYmdLocal(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const mo = String(t.getMonth() + 1).padStart(2, '0');
+  const da = String(t.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
+}
+
+/** Fecha ISO día más temprana (a y b en formato YYYY-MM-DD). */
+function minYmd(a: string, b: string): string {
+  return a <= b ? a : b;
+}
+
+function clampYmd(value: string, minY: string | undefined, maxY: string | undefined): string {
+  if (!value) return '';
+  let v = value;
+  if (minY && v < minY) v = minY;
+  if (maxY && v > maxY) v = maxY;
+  return v;
+}
+
 export function SalesHistoryView({ isAdmin }: Props) {
   const { data: allSales, loading, error } = useSalesHistory(400);
   const [search, setSearch] = useState('');
@@ -63,6 +84,22 @@ export function SalesHistoryView({ isAdmin }: Props) {
     return a > b;
   }, [filterDateStart, filterDateEnd]);
 
+  const dateFutureInvalid = useMemo(() => {
+    const today = dateInputToLocalDay(todayYmdLocal());
+    if (Number.isNaN(today.getTime())) return false;
+    if (filterDateStart) {
+      const s = dateInputToLocalDay(filterDateStart);
+      if (!Number.isNaN(s.getTime()) && s > today) return true;
+    }
+    if (filterDateEnd) {
+      const e = dateInputToLocalDay(filterDateEnd);
+      if (!Number.isNaN(e.getTime()) && e > today) return true;
+    }
+    return false;
+  }, [filterDateStart, filterDateEnd]);
+
+  const dateFilterBlocked = dateRangeInvalid || dateFutureInvalid;
+
   const filtered = useMemo(() => {
     let list = allSales;
 
@@ -81,7 +118,7 @@ export function SalesHistoryView({ isAdmin }: Props) {
         return saleDate >= oneHourAgo;
       });
     } else if (filterDateStart || filterDateEnd) {
-      if (dateRangeInvalid) {
+      if (dateFilterBlocked) {
         list = [];
       } else {
         list = list.filter((s) => {
@@ -117,7 +154,7 @@ export function SalesHistoryView({ isAdmin }: Props) {
     }
 
     return list;
-  }, [allSales, search, filterPayment, filterDateStart, filterDateEnd, filterLastHour, includeCancelled, dateRangeInvalid]);
+  }, [allSales, search, filterPayment, filterDateStart, filterDateEnd, filterLastHour, includeCancelled, dateFilterBlocked]);
 
   const openDetail = useCallback((sale: SaleHistoryRow) => {
     setSelected(sale);
@@ -135,7 +172,8 @@ export function SalesHistoryView({ isAdmin }: Props) {
     setFilterLastHour(false);
   }, []);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayYmdLocal();
+  const maxDesde = filterDateEnd ? minYmd(todayStr, filterDateEnd) : todayStr;
 
   if (error) {
     return (
@@ -179,38 +217,49 @@ export function SalesHistoryView({ isAdmin }: Props) {
         <div className="sales-hist-dates">
           <div className="sales-hist-date-field">
             <span className="sales-hist-mini-label">Desde</span>
-            <input
-              type="date"
-              className="sales-hist-input sales-hist-input--date"
-              value={filterDateStart}
-              max={filterDateEnd || undefined}
-              aria-invalid={dateRangeInvalid}
-              aria-describedby={dateRangeInvalid ? 'sales-hist-date-err' : undefined}
-              onChange={(e) => {
-                setFilterDateStart(e.target.value);
-                setFilterLastHour(false);
-              }}
-            />
+            <div className="sales-hist-date-input-wrap">
+              <input
+                type="date"
+                className="sales-hist-input sales-hist-input--date"
+                value={filterDateStart}
+                max={maxDesde}
+                aria-invalid={dateFilterBlocked}
+                aria-describedby={dateFilterBlocked ? 'sales-hist-date-err' : undefined}
+                onChange={(e) => {
+                  const v = clampYmd(e.target.value, undefined, maxDesde);
+                  setFilterDateStart(v);
+                  setFilterLastHour(false);
+                }}
+              />
+            </div>
           </div>
           <div className="sales-hist-date-field">
             <span className="sales-hist-mini-label">Hasta</span>
-            <input
-              type="date"
-              className="sales-hist-input sales-hist-input--date"
-              value={filterDateEnd}
-              min={filterDateStart || undefined}
-              aria-invalid={dateRangeInvalid}
-              aria-describedby={dateRangeInvalid ? 'sales-hist-date-err' : undefined}
-              onChange={(e) => {
-                setFilterDateEnd(e.target.value);
-                setFilterLastHour(false);
-              }}
-            />
+            <div className="sales-hist-date-input-wrap">
+              <input
+                type="date"
+                className="sales-hist-input sales-hist-input--date"
+                value={filterDateEnd}
+                min={filterDateStart || undefined}
+                max={todayStr}
+                aria-invalid={dateFilterBlocked}
+                aria-describedby={dateFilterBlocked ? 'sales-hist-date-err' : undefined}
+                onChange={(e) => {
+                  const v = clampYmd(e.target.value, filterDateStart || undefined, todayStr);
+                  setFilterDateEnd(v);
+                  setFilterLastHour(false);
+                }}
+              />
+            </div>
           </div>
         </div>
-        {dateRangeInvalid ? (
+        {dateFilterBlocked ? (
           <p id="sales-hist-date-err" className="sales-hist-date-error" role="alert">
-            La fecha inicial no puede ser posterior a la final. Ajuste el rango para filtrar.
+            {dateFutureInvalid && dateRangeInvalid
+              ? 'Las fechas no pueden ser posteriores a hoy y la inicial no puede ser posterior a la final.'
+              : dateFutureInvalid
+                ? 'No puede filtrar con una fecha posterior a hoy.'
+                : 'La fecha inicial no puede ser posterior a la final. Ajuste el rango para filtrar.'}
           </p>
         ) : null}
 
@@ -279,8 +328,8 @@ export function SalesHistoryView({ isAdmin }: Props) {
       ) : filtered.length === 0 ? (
         <div className="sales-hist-empty glass-card">
           <p>
-            {dateRangeInvalid
-              ? 'Corrija el rango de fechas para ver resultados.'
+            {dateFilterBlocked
+              ? 'Ajuste las fechas del filtro para ver resultados.'
               : 'No hay ventas que coincidan.'}
           </p>
         </div>

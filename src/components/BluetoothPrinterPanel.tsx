@@ -7,6 +7,7 @@ import {
   savePrinter,
   clearSavedPrinter,
   ensurePrinterConnected,
+  isThermalPrinterSupported,
 } from '../services/bluetoothThermalPrint';
 import './BluetoothPrinterPanel.scss';
 
@@ -23,7 +24,7 @@ export function BluetoothPrinterPanel() {
   const listenerHandlesRef = useRef<Array<{ remove: () => Promise<void> }>>([]);
 
   const refreshConnection = useCallback(async () => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isThermalPrinterSupported()) return;
     try {
       setConnected(await CapacitorThermalPrinter.isConnected());
     } catch {
@@ -36,7 +37,7 @@ export function BluetoothPrinterPanel() {
   }, [refreshConnection, saved]);
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isThermalPrinterSupported()) return;
 
     let cancelled = false;
     listenerHandlesRef.current = [];
@@ -81,7 +82,7 @@ export function BluetoothPrinterPanel() {
   }, []);
 
   const startSearch = async () => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isThermalPrinterSupported()) return;
     const init = listenersInitRef.current;
     if (!init) {
       setMsg('Espere un momento e intente de nuevo.');
@@ -170,7 +171,19 @@ export function BluetoothPrinterPanel() {
     return (
       <div className="bt-print-panel">
         <h4 className="bt-print-panel__title">Impresora térmica</h4>
-        <p className="bt-print-panel__hint">Disponible en la app instalada (Android / iOS) con impresora Bluetooth.</p>
+        <p className="bt-print-panel__hint">Disponible en la app para Android con impresora Bluetooth ESC/POS.</p>
+      </div>
+    );
+  }
+
+  if (!isThermalPrinterSupported()) {
+    return (
+      <div className="bt-print-panel">
+        <h4 className="bt-print-panel__title">Impresora térmica</h4>
+        <p className="bt-print-panel__hint">
+          En iPhone la impresión Bluetooth térmica no está disponible en esta versión. Tras cada venta puede{' '}
+          <strong>compartir el ticket</strong> como texto desde el punto de venta.
+        </p>
       </div>
     );
   }

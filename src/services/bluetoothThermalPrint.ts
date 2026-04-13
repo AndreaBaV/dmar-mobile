@@ -6,8 +6,12 @@ import { baseProductName } from '../lib/ticketText';
 const LS_ADDR = 'dmar_thermal_printer_address';
 const LS_NAME = 'dmar_thermal_printer_name';
 
-export function isNativeForThermal(): boolean {
-  return Capacitor.isNativePlatform();
+/**
+ * `capacitor-thermal-printer` solo tiene implementación nativa en Android.
+ * En iOS el plugin responde "not implemented" — no llamarlo.
+ */
+export function isThermalPrinterSupported(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 }
 
 export function getSavedPrinter(): { address: string; name: string } | null {
@@ -40,6 +44,7 @@ export function clearSavedPrinter(): void {
 }
 
 export async function ensurePrinterConnected(): Promise<boolean> {
+  if (!isThermalPrinterSupported()) return false;
   const saved = getSavedPrinter();
   if (!saved) return false;
   try {
@@ -66,6 +71,9 @@ export type ThermalTicketParams = {
  * Requiere impresora emparejada y conexión previa o `ensurePrinterConnected`.
  */
 export async function printThermalTicket(p: ThermalTicketParams): Promise<void> {
+  if (!isThermalPrinterSupported()) {
+    throw new Error('Impresora térmica Bluetooth no disponible en este dispositivo.');
+  }
   const date = new Date().toLocaleString('es-MX', {
     year: 'numeric',
     month: '2-digit',
@@ -117,7 +125,7 @@ export async function printThermalTicket(p: ThermalTicketParams): Promise<void> 
 
 /** Tras una venta: conecta si hay guardada, imprime; devuelve si imprimió. */
 export async function tryPrintSaleTicket(p: ThermalTicketParams): Promise<boolean> {
-  if (!isNativeForThermal()) return false;
+  if (!isThermalPrinterSupported()) return false;
   const saved = getSavedPrinter();
   if (!saved) return false;
   const ok = await ensurePrinterConnected();

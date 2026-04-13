@@ -11,6 +11,7 @@ import { clientService } from './clientService';
 import { ProductService } from './productService';
 import { NotificationService } from './notificationService';
 import type { Variant } from '../types/Product';
+import { normalizeColor, normalizeSize } from '../utils/normalizeFilters';
 
 interface CartItem {
   productId: string;
@@ -202,6 +203,17 @@ export class SaleService {
     quantity: number
   ): Promise<void> {
     try {
+      if (variant.variantId && variant.sizeId) {
+        const sizeRef = doc(db, 'products', productId, 'variants', variant.variantId, 'sizes', variant.sizeId);
+        const snap = await getDoc(sizeRef);
+        if (snap.exists()) {
+          const currentStock = Number(snap.data()?.stock) || 0;
+          const newStock = Math.max(0, currentStock - quantity);
+          await updateDoc(sizeRef, { stock: newStock });
+          return;
+        }
+      }
+
       const variantsRef = collection(db, 'products', productId, 'variants');
       const variantsSnap = await getDocs(variantsRef);
 
@@ -209,40 +221,45 @@ export class SaleService {
         throw new Error(`No hay variantes para el producto ${productId}`);
       }
 
-      const normalizedSearchColor = this.normalizeText(variant.color);
-      const normalizedSearchSize = this.normalizeText(variant.size);
-      
+      /** Misma lógica que ProductService al mostrar variantes (color base + talla canónica). */
+      const normalizedSearchColor = this.normalizeText(normalizeColor(variant.color || ''));
+      const normalizedSearchSize = this.normalizeText(normalizeSize(variant.size || ''));
+
       console.log(`  Buscando: "${variant.color}" → "${normalizedSearchColor}" / "${variant.size}" → "${normalizedSearchSize}"`);
 
       for (const variantDoc of variantsSnap.docs) {
         const variantData = variantDoc.data();
-        
-        const normalizedDbColor = this.normalizeText(variantData.color || '');
-        const normalizedDbColorCode = this.normalizeText(variantData.colorCode || '');
-        
-        const colorMatch = 
-          normalizedDbColor === normalizedSearchColor || 
-          normalizedDbColorCode === normalizedSearchColor;
+
+        const normalizedDbColor = this.normalizeText(normalizeColor(String(variantData.color || variantData.Color || '')));
+        const codeRaw = variantData.colorCode || variantData.hex || variantData.color_hex;
+        const normalizedDbColorCode = codeRaw
+          ? this.normalizeText(normalizeColor(String(codeRaw)))
+          : '';
+
+        const colorMatch =
+          normalizedDbColor === normalizedSearchColor ||
+          (normalizedDbColorCode !== '' && normalizedDbColorCode === normalizedSearchColor);
 
         if (colorMatch) {
           console.log(`  ✓ Color match: DB="${variantData.color}"`);
-          
+
           const sizesRef = collection(db, 'products', productId, 'variants', variantDoc.id, 'sizes');
           const sizesSnap = await getDocs(sizesRef);
 
           for (const sizeDoc of sizesSnap.docs) {
             const sizeData = sizeDoc.data();
-            const normalizedDbSize = this.normalizeText(sizeData.size || '');
-            
+            const rawSize = sizeData.size || sizeData.talla || sizeData.Talla || '';
+            const normalizedDbSize = this.normalizeText(normalizeSize(String(rawSize)));
+
             if (normalizedDbSize === normalizedSearchSize) {
               console.log(`  ✓ Talla match: DB="${sizeData.size}"`);
-              
+
               const sizeRef = doc(db, 'products', productId, 'variants', variantDoc.id, 'sizes', sizeDoc.id);
               const currentStock = Number(sizeData.stock) || 0;
               const newStock = Math.max(0, currentStock - quantity);
 
               await updateDoc(sizeRef, { stock: newStock });
-              
+
               console.log(`  Stock: ${currentStock} → ${newStock}`);
               return;
             }

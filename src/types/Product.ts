@@ -8,6 +8,9 @@ export interface Variant {
   purchasePrice?: number; // Precio de compra
   profitMargin?: number; // Porcentaje de utilidad (ej: 50 = 50%)
   salePrice?: number; // Precio de venta calculado
+  /** Firestore: products/{productId}/variants/{variantId}/sizes/{sizeId} */
+  variantId?: string;
+  sizeId?: string;
 }
 
 export interface SkuVariantDocument {
