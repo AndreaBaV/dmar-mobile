@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
-import { openDebugConsole } from '../lib/debugConsole';
 import { isVoiceEnabledFor } from '../lib/voiceModuleSettings';
 import { speakGuidance } from '../lib/voiceOutput';
 import './LoginView.scss';
@@ -158,9 +157,6 @@ export function LoginView({ onBeforeSignIn, onSignInFailed }: Props) {
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
         </form>
-        <button type="button" className="login-logs-link" onClick={() => void openDebugConsole()}>
-          Ver logs (depuración)
-        </button>
       </div>
     </div>
   );

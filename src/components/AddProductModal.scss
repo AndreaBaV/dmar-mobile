@@ -195,6 +195,10 @@
   }
 }
 
+.add-product-tile--out .add-product-tile-name {
+  color: var(--text-secondary, #64748b);
+}
+
 .add-product-tile-img-wrap {
   position: relative;
   aspect-ratio: 1;

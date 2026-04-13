@@ -38,20 +38,42 @@
 }
 
 .sales-hist-dates {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
 .sales-hist-date-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sales-hist-date-field .sales-hist-input--date {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .sales-hist-mini-label {
   font-size: 0.7rem;
   color: var(--text-secondary, #64748b);
+}
+
+.sales-hist-date-error {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b91c1c;
+  line-height: 1.35;
+}
+
+.sales-hist-input[aria-invalid='true'] {
+  border-color: rgba(185, 28, 28, 0.55);
 }
 
 .sales-hist-chips {

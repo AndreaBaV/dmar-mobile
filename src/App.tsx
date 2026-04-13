@@ -18,7 +18,6 @@ import {
   isWeeklySessionValid,
   formatSessionExpiry,
 } from './lib/weeklyAuth';
-import { openDebugConsole } from './lib/debugConsole';
 import { LoginView } from './components/LoginView';
 import { InventoryView } from './components/InventoryView';
 import { SalesHistoryView } from './components/SalesHistoryView';
@@ -932,11 +931,11 @@ function App() {
                             >
                               <TrashIcon />
                             </button>
+                            <div className="item-price-col">
+                              <span className="item-price">${(it.price * it.quantity).toFixed(2)}</span>
+                              <span className="item-unit">c/u ${it.price.toFixed(2)}</span>
+                            </div>
                           </div>
-                        </div>
-                        <div className="item-price-col">
-                          <span className="item-price">${(it.price * it.quantity).toFixed(2)}</span>
-                          <span className="item-unit">c/u ${it.price.toFixed(2)}</span>
                         </div>
                       </div>
                     ))}
@@ -1076,11 +1075,6 @@ function App() {
                   Probar voz
                 </button>
               </div>
-              {isAdmin ? (
-                <button type="button" className="session-btn session-btn--secondary" onClick={() => void openDebugConsole()}>
-                  Abrir consola de logs
-                </button>
-              ) : null}
               <button type="button" className="session-btn session-btn--secondary" onClick={() => setVoiceCalibrationOpen(true)}>
                 Práctica de reconocimiento de voz
               </button>

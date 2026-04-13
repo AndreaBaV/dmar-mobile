@@ -213,13 +213,15 @@ export function AddProductModal({ open, products, catalogoListo, onClose, onAddL
   const list = useMemo(() => {
     const term = query.trim().toLowerCase();
     const withStock = products.filter((p) => ProductService.getTotalStock(p) > 0);
-    const base = term ? ProductService.filterProducts(withStock, term) : withStock;
+    /** Con búsqueda: mostrar todas las coincidencias (incluye sin stock → "Sin stock" y deshabilitado). Sin término: solo con existencias. */
+    const base = term ? ProductService.filterProducts(products, term) : withStock;
     return [...base].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
   }, [products, query]);
 
   if (!open) return null;
 
   const addProduct = (p: Product) => {
+    if (ProductService.getTotalStock(p) <= 0) return;
     const vs = variantsInStock(p);
     if (vs.length > 1) {
       setPickerProduct(p);
@@ -342,16 +344,23 @@ export function AddProductModal({ open, products, catalogoListo, onClose, onAddL
               {list.map((p) => {
                 const img = productImageUrl(p);
                 const stock = ProductService.getTotalStock(p);
+                const sinStock = stock <= 0;
                 return (
                   <li key={p.id}>
-                    <button type="button" className="add-product-tile" onClick={() => addProduct(p)} disabled={stock <= 0}>
+                    <button
+                      type="button"
+                      className={`add-product-tile${sinStock ? ' add-product-tile--out' : ''}`}
+                      onClick={() => addProduct(p)}
+                      disabled={sinStock}
+                      aria-label={sinStock ? `${p.name}, sin stock` : p.name}
+                    >
                       <div className="add-product-tile-img-wrap">
                         {img ? (
                           <img src={img} alt="" className="add-product-tile-img" />
                         ) : (
                           <div className="add-product-placeholder" aria-hidden />
                         )}
-                        {stock <= 0 ? <span className="add-product-soldout">Sin stock</span> : null}
+                        {sinStock ? <span className="add-product-soldout">Sin stock</span> : null}
                       </div>
                       <span className="add-product-tile-name">{p.name}</span>
                     </button>
@@ -359,7 +368,13 @@ export function AddProductModal({ open, products, catalogoListo, onClose, onAddL
                 );
               })}
             </ul>
-            {list.length === 0 ? <p className="add-product-empty">No hay productos con stock que coincidan.</p> : null}
+            {list.length === 0 ? (
+              <p className="add-product-empty">
+                {query.trim()
+                  ? 'No hay productos que coincidan con la búsqueda.'
+                  : 'No hay productos con stock.'}
+              </p>
+            ) : null}
           </>
         )}
         <button type="button" className="add-product-close" onClick={closeAll}>

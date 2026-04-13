@@ -197,6 +197,10 @@ function ApartadosSubView({ cashierName }: { cashierName: string }) {
       setMsg('Monto inválido');
       return;
     }
+    const ok = window.confirm(
+      `Registrar abono de $${n.toFixed(2)}, ¿desea confirmar la acción?`
+    );
+    if (!ok) return;
     setMsg(null);
     try {
       await apartadoService.addPayment(detail.id, n, 'cash');
@@ -210,6 +214,15 @@ function ApartadosSubView({ cashierName }: { cashierName: string }) {
 
   const doLiquidar = async () => {
     if (!detail) return;
+    const saldo = remaining(detail);
+    if (saldo <= 0) {
+      setMsg('No hay saldo pendiente por liquidar.');
+      return;
+    }
+    const ok = window.confirm(
+      `Liquidar saldo de $${saldo.toFixed(2)}, ¿desea confirmar la acción?`
+    );
+    if (!ok) return;
     setMsg(null);
     try {
       await apartadoService.liquidate(detail.id, 'cash', cashierName);
@@ -288,10 +301,32 @@ const statusLabel: Record<PickupOrderStatus, string> = {
   delivered: 'Entregado',
 };
 
+const paymentStatusLabel: Record<PickupOrder['paymentStatus'], string> = {
+  pending_in_store: 'Pago pendiente en tienda',
+  paid: 'Pagado',
+};
+
+function formatPickupOrderCreatedAt(createdAt: unknown): string {
+  if (createdAt == null) return '—';
+  const d =
+    typeof createdAt === 'object' &&
+    createdAt !== null &&
+    'toDate' in createdAt &&
+    typeof (createdAt as { toDate: () => Date }).toDate === 'function'
+      ? (createdAt as { toDate: () => Date }).toDate()
+      : new Date(createdAt as string | number | Date);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
 function PedidosSubView() {
   const [orders, setOrders] = useState<PickupOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PickupOrder | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,6 +347,7 @@ function PedidosSubView() {
   const setStatus = async (id: string, s: PickupOrderStatus) => {
     try {
       await PickupOrderService.updateOrderStatus(id, s);
+      setDetail((cur) => (cur?.id === id ? null : cur));
       void load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error');
@@ -321,11 +357,14 @@ function PedidosSubView() {
   const pay = async (id: string) => {
     try {
       await PickupOrderService.markAsPaid(id);
+      setDetail((cur) => (cur?.id === id ? null : cur));
       void load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error');
     }
   };
+
+  const closeDetail = () => setDetail(null);
 
   return (
     <>
@@ -335,13 +374,16 @@ function PedidosSubView() {
       <ul className="mas-hub__list mas-hub__list--wide">
         {orders.map((o) => (
           <li key={o.id} className="mas-hub__order">
-            <div className="mas-hub__order-head">
-              <strong>{o.customerName}</strong>
-              <span>{statusLabel[o.status]}</span>
-            </div>
-            <div className="mas-hub__order-meta">
-              {o.pickupDate} · {o.pickupTimeSlot} · ${o.total.toFixed(2)}
-            </div>
+            <button type="button" className="mas-hub__order-summary" onClick={() => setDetail(o)}>
+              <div className="mas-hub__order-head">
+                <strong>{o.customerName}</strong>
+                <span>{statusLabel[o.status]}</span>
+              </div>
+              <div className="mas-hub__order-meta">
+                {o.pickupDate} · {o.pickupTimeSlot} · ${o.total.toFixed(2)}
+              </div>
+              <span className="mas-hub__order-tap-hint">Ver detalle</span>
+            </button>
             <div className="mas-hub__order-actions">
               {o.status === 'pending' ? (
                 <button type="button" className="mas-hub__btn" onClick={() => void setStatus(o.id, 'packed')}>
@@ -362,6 +404,92 @@ function PedidosSubView() {
           </li>
         ))}
       </ul>
+
+      {detail ? (
+        <div className="mas-hub__modal-back" role="dialog" aria-modal aria-labelledby="pickup-detail-title" onClick={closeDetail}>
+          <div className="mas-hub__modal mas-hub__modal--detail" onClick={(e) => e.stopPropagation()}>
+            <h3 id="pickup-detail-title">{detail.customerName}</h3>
+            <p className="mas-hub__muted">Pedido #{detail.id.slice(0, 8)}…</p>
+            <dl className="mas-hub__detail-dl">
+              <div>
+                <dt>Teléfono</dt>
+                <dd>{detail.customerPhone || '—'}</dd>
+              </div>
+              {detail.customerEmail ? (
+                <div>
+                  <dt>Correo</dt>
+                  <dd>{detail.customerEmail}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>Recogida</dt>
+                <dd>
+                  {detail.pickupDate} · {detail.pickupTimeSlot}
+                </dd>
+              </div>
+              <div>
+                <dt>Estado</dt>
+                <dd>{statusLabel[detail.status]}</dd>
+              </div>
+              <div>
+                <dt>Pago</dt>
+                <dd>{paymentStatusLabel[detail.paymentStatus]}</dd>
+              </div>
+              <div>
+                <dt>Registro</dt>
+                <dd>{formatPickupOrderCreatedAt(detail.createdAt)}</dd>
+              </div>
+            </dl>
+            {detail.notes?.trim() ? (
+              <div className="mas-hub__detail-notes">
+                <span className="mas-hub__detail-notes-label">Notas</span>
+                <p>{detail.notes.trim()}</p>
+              </div>
+            ) : null}
+            <h4 className="mas-hub__detail-items-title">Artículos</h4>
+            <ul className="mas-hub__detail-items">
+              {(detail.items ?? []).map((it, idx) => (
+                <li key={`${it.productId}-${idx}`}>
+                  <span className="mas-hub__detail-item-name">
+                    {it.name}
+                    {it.variant ? (
+                      <span className="mas-hub__muted">
+                        {' '}
+                        ({it.variant.color} / {it.variant.size})
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mas-hub__detail-item-qty">×{it.quantity}</span>
+                  <span className="mas-hub__detail-item-price">${(it.price * it.quantity).toFixed(2)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mas-hub__detail-total">
+              Total <strong>${detail.total.toFixed(2)}</strong>
+            </p>
+            <div className="mas-hub__modal-actions mas-hub__modal-actions--detail">
+              {detail.status === 'pending' ? (
+                <button type="button" className="mas-hub__btn" onClick={() => void setStatus(detail.id, 'packed')}>
+                  Empacado
+                </button>
+              ) : null}
+              {detail.status === 'packed' && detail.paymentStatus === 'pending_in_store' ? (
+                <button type="button" className="mas-hub__btn mas-hub__btn--primary" onClick={() => void pay(detail.id)}>
+                  Cobrar en tienda
+                </button>
+              ) : null}
+              {detail.paymentStatus === 'paid' && detail.status !== 'delivered' ? (
+                <button type="button" className="mas-hub__btn" onClick={() => void setStatus(detail.id, 'delivered')}>
+                  Entregado
+                </button>
+              ) : null}
+            </div>
+            <button type="button" className="mas-hub__btn mas-hub__btn--block" onClick={closeDetail}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

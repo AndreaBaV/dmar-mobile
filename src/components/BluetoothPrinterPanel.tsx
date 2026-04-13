@@ -17,7 +17,10 @@ export function BluetoothPrinterPanel() {
   const [msg, setMsg] = useState<string | null>(null);
   const [saved, setSaved] = useState(() => getSavedPrinter());
   const [connected, setConnected] = useState(false);
-  const listenersReady = useRef(false);
+  const [listenersReady, setListenersReady] = useState(false);
+  /** Promesa que resuelve cuando los listeners del plugin están registrados (evita clics antes de tiempo). */
+  const listenersInitRef = useRef<Promise<void> | null>(null);
+  const listenerHandlesRef = useRef<Array<{ remove: () => Promise<void> }>>([]);
 
   const refreshConnection = useCallback(async () => {
     if (!Capacitor.isNativePlatform()) return;
@@ -36,37 +39,59 @@ export function BluetoothPrinterPanel() {
     if (!Capacitor.isNativePlatform()) return;
 
     let cancelled = false;
-    const handles: Array<{ remove: () => Promise<void> }> = [];
+    listenerHandlesRef.current = [];
 
-    void (async () => {
-      const h1 = await CapacitorThermalPrinter.addListener('discoverDevices', (e) => {
-        if (!cancelled) setDevices(e.devices ?? []);
-      });
-      handles.push(h1);
-      const h2 = await CapacitorThermalPrinter.addListener('discoveryFinish', () => {
-        if (!cancelled) setScanning(false);
-      });
-      handles.push(h2);
-      const h3 = await CapacitorThermalPrinter.addListener('connected', () => {
-        if (!cancelled) setConnected(true);
-      });
-      handles.push(h3);
-      const h4 = await CapacitorThermalPrinter.addListener('disconnected', () => {
-        if (!cancelled) setConnected(false);
-      });
-      handles.push(h4);
-      listenersReady.current = true;
+    listenersInitRef.current = (async () => {
+      try {
+        const h1 = await CapacitorThermalPrinter.addListener('discoverDevices', (e) => {
+          if (!cancelled) setDevices(e.devices ?? []);
+        });
+        listenerHandlesRef.current.push(h1);
+        const h2 = await CapacitorThermalPrinter.addListener('discoveryFinish', () => {
+          if (!cancelled) setScanning(false);
+        });
+        listenerHandlesRef.current.push(h2);
+        const h3 = await CapacitorThermalPrinter.addListener('connected', () => {
+          if (!cancelled) setConnected(true);
+        });
+        listenerHandlesRef.current.push(h3);
+        const h4 = await CapacitorThermalPrinter.addListener('disconnected', () => {
+          if (!cancelled) setConnected(false);
+        });
+        listenerHandlesRef.current.push(h4);
+        if (!cancelled) setListenersReady(true);
+      } catch (e) {
+        console.error('[BluetoothPrinterPanel] addListener', e);
+        if (!cancelled) {
+          setMsg(e instanceof Error ? e.message : 'No se pudo iniciar Bluetooth.');
+          setListenersReady(false);
+        }
+        throw e;
+      }
     })();
 
     return () => {
       cancelled = true;
-      listenersReady.current = false;
-      void Promise.all(handles.map((h) => h.remove()));
+      setListenersReady(false);
+      listenersInitRef.current = null;
+      const hs = [...listenerHandlesRef.current];
+      listenerHandlesRef.current = [];
+      void Promise.all(hs.map((h) => h.remove()));
     };
   }, []);
 
   const startSearch = async () => {
-    if (!Capacitor.isNativePlatform() || !listenersReady.current) return;
+    if (!Capacitor.isNativePlatform()) return;
+    const init = listenersInitRef.current;
+    if (!init) {
+      setMsg('Espere un momento e intente de nuevo.');
+      return;
+    }
+    try {
+      await init;
+    } catch {
+      return;
+    }
     setMsg(null);
     setDevices([]);
     setScanning(true);
@@ -170,8 +195,13 @@ export function BluetoothPrinterPanel() {
       {msg ? <p className="bt-print-panel__msg">{msg}</p> : null}
 
       <div className="bt-print-panel__actions">
-        <button type="button" className="bt-print-panel__btn" disabled={scanning || busy} onClick={() => void startSearch()}>
-          {scanning ? 'Buscando…' : 'Buscar impresoras'}
+        <button
+          type="button"
+          className="bt-print-panel__btn"
+          disabled={scanning || busy || !listenersReady}
+          onClick={() => void startSearch()}
+        >
+          {!listenersReady ? 'Preparando Bluetooth…' : scanning ? 'Buscando…' : 'Buscar impresoras'}
         </button>
         {saved ? (
           <>

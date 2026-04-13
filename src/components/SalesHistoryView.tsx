@@ -37,6 +37,13 @@ function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+/** Compara solo día (YYYY-MM-DD) en hora local; coherente con filtros del listado. */
+function dateInputToLocalDay(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map((x) => Number.parseInt(x, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return new Date(NaN);
+  return new Date(y, m - 1, d);
+}
+
 export function SalesHistoryView({ isAdmin }: Props) {
   const { data: allSales, loading, error } = useSalesHistory(400);
   const [search, setSearch] = useState('');
@@ -47,6 +54,14 @@ export function SalesHistoryView({ isAdmin }: Props) {
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [selected, setSelected] = useState<SaleHistoryRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  const dateRangeInvalid = useMemo(() => {
+    if (!filterDateStart || !filterDateEnd) return false;
+    const a = dateInputToLocalDay(filterDateStart);
+    const b = dateInputToLocalDay(filterDateEnd);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+    return a > b;
+  }, [filterDateStart, filterDateEnd]);
 
   const filtered = useMemo(() => {
     let list = allSales;
@@ -66,23 +81,29 @@ export function SalesHistoryView({ isAdmin }: Props) {
         return saleDate >= oneHourAgo;
       });
     } else if (filterDateStart || filterDateEnd) {
-      list = list.filter((s) => {
-        const saleDate = toDate(s.timestamp);
-        const saleDateOnly = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
-        let okStart = true;
-        let okEnd = true;
-        if (filterDateStart) {
-          const start = new Date(filterDateStart);
-          const startOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-          okStart = saleDateOnly >= startOnly;
-        }
-        if (filterDateEnd) {
-          const end = new Date(filterDateEnd);
-          const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-          okEnd = saleDateOnly <= endDay;
-        }
-        return okStart && okEnd;
-      });
+      if (dateRangeInvalid) {
+        list = [];
+      } else {
+        list = list.filter((s) => {
+          const saleDate = toDate(s.timestamp);
+          const saleDateOnly = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
+          let okStart = true;
+          let okEnd = true;
+          if (filterDateStart) {
+            const startOnly = dateInputToLocalDay(filterDateStart);
+            if (!Number.isNaN(startOnly.getTime())) {
+              okStart = saleDateOnly >= startOnly;
+            }
+          }
+          if (filterDateEnd) {
+            const endDay = dateInputToLocalDay(filterDateEnd);
+            if (!Number.isNaN(endDay.getTime())) {
+              okEnd = saleDateOnly <= endDay;
+            }
+          }
+          return okStart && okEnd;
+        });
+      }
     }
 
     const q = search.trim().toLowerCase();
@@ -96,7 +117,7 @@ export function SalesHistoryView({ isAdmin }: Props) {
     }
 
     return list;
-  }, [allSales, search, filterPayment, filterDateStart, filterDateEnd, filterLastHour, includeCancelled]);
+  }, [allSales, search, filterPayment, filterDateStart, filterDateEnd, filterLastHour, includeCancelled, dateRangeInvalid]);
 
   const openDetail = useCallback((sale: SaleHistoryRow) => {
     setSelected(sale);
@@ -162,6 +183,9 @@ export function SalesHistoryView({ isAdmin }: Props) {
               type="date"
               className="sales-hist-input sales-hist-input--date"
               value={filterDateStart}
+              max={filterDateEnd || undefined}
+              aria-invalid={dateRangeInvalid}
+              aria-describedby={dateRangeInvalid ? 'sales-hist-date-err' : undefined}
               onChange={(e) => {
                 setFilterDateStart(e.target.value);
                 setFilterLastHour(false);
@@ -174,6 +198,9 @@ export function SalesHistoryView({ isAdmin }: Props) {
               type="date"
               className="sales-hist-input sales-hist-input--date"
               value={filterDateEnd}
+              min={filterDateStart || undefined}
+              aria-invalid={dateRangeInvalid}
+              aria-describedby={dateRangeInvalid ? 'sales-hist-date-err' : undefined}
               onChange={(e) => {
                 setFilterDateEnd(e.target.value);
                 setFilterLastHour(false);
@@ -181,6 +208,11 @@ export function SalesHistoryView({ isAdmin }: Props) {
             />
           </div>
         </div>
+        {dateRangeInvalid ? (
+          <p id="sales-hist-date-err" className="sales-hist-date-error" role="alert">
+            La fecha inicial no puede ser posterior a la final. Ajuste el rango para filtrar.
+          </p>
+        ) : null}
 
         <div className="sales-hist-chips">
           <button
@@ -246,7 +278,11 @@ export function SalesHistoryView({ isAdmin }: Props) {
         </div>
       ) : filtered.length === 0 ? (
         <div className="sales-hist-empty glass-card">
-          <p>No hay ventas que coincidan.</p>
+          <p>
+            {dateRangeInvalid
+              ? 'Corrija el rango de fechas para ver resultados.'
+              : 'No hay ventas que coincidan.'}
+          </p>
         </div>
       ) : (
         <ul className="sales-hist-list">

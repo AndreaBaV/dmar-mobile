@@ -36,16 +36,3 @@ button {
   align-items: stretch;
 }
 
-/* vConsole por encima de glass / tab bar */
-#__vconsole {
-  z-index: 2147483646 !important;
-}
-
-/* vConsole: evitar gestos raros de zoom y mejorar toque */
-#__vconsole .vc-switch,
-#__vconsole .vc-mask,
-#__vconsole .vc-panel,
-#__vconsole .vc-toolbar,
-#__vconsole .vc-content {
-  touch-action: manipulation;
-}

@@ -1,24 +1,82 @@
-/** Abre el HTML en una ventana y dispara el diálogo de impresión del sistema. */
+/**
+ * Muestra el diálogo de impresión del sistema con el HTML dado.
+ * Usa un iframe oculto para no depender de ventanas emergentes (evita bloqueos y avisos en WebView).
+ */
 export function printHtmlInNewWindow(html: string): void {
-  const w = window.open('', '_blank', 'noopener,noreferrer');
-  if (!w) {
-    window.alert('No se pudo abrir la ventana de impresión. Permita ventanas emergentes para este sitio.');
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('title', 'Impresión');
+  iframe.setAttribute('aria-hidden', 'true');
+
+  const s = iframe.style;
+  s.position = 'fixed';
+  s.right = '0';
+  s.bottom = '0';
+  s.width = '1px';
+  s.height = '1px';
+  s.border = '0';
+  s.opacity = '0';
+  s.pointerEvents = 'none';
+
+  document.body.appendChild(iframe);
+
+  const win = iframe.contentWindow;
+  const doc = iframe.contentDocument;
+  if (!win || !doc) {
+    try {
+      iframe.remove();
+    } catch {
+      /* */
+    }
+    window.alert('No se pudo preparar la impresión. Intente de nuevo.');
     return;
   }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  const trigger = () => {
+
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  let cleaned = false;
+  let fallbackTimer: number | undefined;
+
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (fallbackTimer !== undefined) {
+      window.clearTimeout(fallbackTimer);
+    }
     try {
-      w.print();
+      win.removeEventListener('afterprint', afterPrint);
+    } catch {
+      /* */
+    }
+    try {
+      iframe.remove();
     } catch {
       /* */
     }
   };
-  if (w.document.readyState === 'complete') {
-    setTimeout(trigger, 0);
+
+  const afterPrint = () => {
+    cleanup();
+  };
+
+  const runPrint = () => {
+    try {
+      win.addEventListener('afterprint', afterPrint);
+      win.focus();
+      win.print();
+    } catch {
+      cleanup();
+      window.alert('No se pudo abrir el cuadro de impresión.');
+      return;
+    }
+    // Por si el motor no emite afterprint (poco frecuente), no dejar el iframe colgado para siempre
+    fallbackTimer = window.setTimeout(cleanup, 120_000);
+  };
+
+  if (doc.readyState === 'complete') {
+    requestAnimationFrame(() => setTimeout(runPrint, 0));
   } else {
-    w.onload = () => setTimeout(trigger, 0);
+    win.onload = () => setTimeout(runPrint, 0);
   }
 }

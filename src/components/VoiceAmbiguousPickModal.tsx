@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Product, Variant } from '../types/Product';
+import { ProductService } from '../services/productService';
 import {
   productImageUrl,
   productToCartLineFromVariant,
@@ -39,6 +40,7 @@ export function VoiceAmbiguousPickModal({ open, candidates, quantity, onPick, on
   };
 
   const onProductTap = (p: Product) => {
+    if (ProductService.getTotalStock(p) <= 0) return;
     const vs = variantsInStock(p);
     if (vs.length <= 1) {
       const line = productToDefaultCartLine(p, quantity);
@@ -106,11 +108,20 @@ export function VoiceAmbiguousPickModal({ open, candidates, quantity, onPick, on
         <ul className="voice-amb-grid">
           {candidates.map((p) => {
             const img = productImageUrl(p);
+            const stock = ProductService.getTotalStock(p);
+            const sinStock = stock <= 0;
             return (
               <li key={p.id}>
-                <button type="button" className="voice-amb-tile" onClick={() => onProductTap(p)}>
+                <button
+                  type="button"
+                  className={`voice-amb-tile${sinStock ? ' voice-amb-tile--out' : ''}`}
+                  onClick={() => onProductTap(p)}
+                  disabled={sinStock}
+                  aria-label={sinStock ? `${p.name}, sin stock` : p.name}
+                >
                   <div className="voice-amb-tile-img-wrap">
                     {img ? <img src={img} alt="" className="voice-amb-tile-img" /> : <div className="voice-amb-placeholder" aria-hidden />}
+                    {sinStock ? <span className="voice-amb-soldout">Sin stock</span> : null}
                   </div>
                   <span className="voice-amb-tile-name">{p.name}</span>
                 </button>
