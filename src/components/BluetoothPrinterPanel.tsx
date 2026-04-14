@@ -171,7 +171,9 @@ export function BluetoothPrinterPanel() {
     return (
       <div className="bt-print-panel">
         <h4 className="bt-print-panel__title">Impresora térmica</h4>
-        <p className="bt-print-panel__hint">Disponible en la app para Android con impresora Bluetooth ESC/POS.</p>
+        <p className="bt-print-panel__hint">
+          Disponible en la app instalada: Android (Bluetooth clásico) o iPhone (impresora ESC/POS con Bluetooth Low Energy).
+        </p>
       </div>
     );
   }
@@ -180,20 +182,21 @@ export function BluetoothPrinterPanel() {
     return (
       <div className="bt-print-panel">
         <h4 className="bt-print-panel__title">Impresora térmica</h4>
-        <p className="bt-print-panel__hint">
-          En iPhone la impresión Bluetooth térmica no está disponible en esta versión. Tras cada venta puede{' '}
-          <strong>compartir el ticket</strong> como texto desde el punto de venta.
-        </p>
+        <p className="bt-print-panel__hint">Impresión térmica no disponible en esta plataforma.</p>
       </div>
     );
   }
+
+  const isIos = Capacitor.getPlatform() === 'ios';
 
   return (
     <div className="bt-print-panel">
       <h4 className="bt-print-panel__title">Impresora térmica (Bluetooth)</h4>
       <p className="bt-print-panel__intro">
-        Vincule una impresora de tickets ESC/POS por Bluetooth. Tras cada venta se imprimirá el ticket; si no hay impresora,
-        podrá compartir el texto del ticket.
+        {isIos
+          ? 'En iPhone use una impresora de tickets ESC/POS con Bluetooth Low Energy (BLE). El escaneo puede listar varios dispositivos cercanos: elija su impresora.'
+          : 'Vincule una impresora de tickets ESC/POS por Bluetooth (modo clásico).'}{' '}
+        Tras cada venta se imprimirá el ticket; si no hay impresora, podrá compartir el texto del ticket.
       </p>
 
       {saved ? (

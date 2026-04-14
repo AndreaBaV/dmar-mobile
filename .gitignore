@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 dist
+
+# Vendoreado desde node_modules para SPM iOS (impresora térmica); se regenera con npm install / setup-ios-thermal-printer
+ios/App/LocalPackages/CapacitorThermalPrinter/Vendor/
 dist-ssr
 *.local
 .env

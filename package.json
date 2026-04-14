@@ -10,7 +10,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "node scripts/setup-ios-thermal-printer.mjs",
+    "cap:sync:ios": "npm run build && npx cap sync ios && node scripts/setup-ios-thermal-printer.mjs"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^8.0.0",

@@ -1,6 +1,8 @@
 .sales-hist {
+  /* main-content usa align-items: center; sin stretch el bloque puede no limitar bien al contenido intrínseco del date */
+  align-self: stretch;
   width: 100%;
-  max-width: 440px;
+  max-width: min(440px, 100%);
   margin: 0 auto;
   padding: 0 12px 100px;
   box-sizing: border-box;
@@ -8,6 +10,7 @@
 }
 
 .sales-hist-filters {
+  width: 100%;
   padding: 16px;
   margin-bottom: 16px;
   display: flex;
@@ -16,7 +19,7 @@
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .sales-hist-label {
@@ -73,7 +76,7 @@
   overflow: hidden;
 
   .sales-hist-input--date {
-    flex: 1 1 0;
+    flex: 1 1 0%;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -81,6 +84,13 @@
     border: none;
     border-radius: 0;
     box-sizing: border-box;
+    /* Chromium/WebKit: el editor interno impone ~min-content ancho; forzar a respetar el contenedor */
+    &::-webkit-datetime-edit,
+    &::-webkit-datetime-edit-fields-wrapper {
+      max-width: 100%;
+      min-width: 0;
+      padding: 0;
+    }
   }
 }
 
