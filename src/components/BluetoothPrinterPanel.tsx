@@ -22,6 +22,8 @@ export function BluetoothPrinterPanel() {
   /** Promesa que resuelve cuando los listeners del plugin están registrados (evita clics antes de tiempo). */
   const listenersInitRef = useRef<Promise<void> | null>(null);
   const listenerHandlesRef = useRef<Array<{ remove: () => Promise<void> }>>([]);
+  /** Evita timeout falso si los listeners ya respondieron (addListener puede colgarse si el nativo no está enlazado). */
+  const listenersOkRef = useRef(false);
 
   const refreshConnection = useCallback(async () => {
     if (!isThermalPrinterSupported()) return;
@@ -40,7 +42,17 @@ export function BluetoothPrinterPanel() {
     if (!isThermalPrinterSupported()) return;
 
     let cancelled = false;
+    listenersOkRef.current = false;
     listenerHandlesRef.current = [];
+
+    const timeoutMs = 12_000;
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled || listenersOkRef.current) return;
+      setMsg(
+        'El plugin de impresora no respondió (suele ser iOS sin enlace SPM). En la raíz del proyecto ejecute: npm install, luego npx cap sync ios, luego node scripts/setup-ios-thermal-printer.mjs y en Xcode: Product → Clean Build Folder → Run.'
+      );
+      setListenersReady(true);
+    }, timeoutMs);
 
     listenersInitRef.current = (async () => {
       try {
@@ -60,19 +72,26 @@ export function BluetoothPrinterPanel() {
           if (!cancelled) setConnected(false);
         });
         listenerHandlesRef.current.push(h4);
-        if (!cancelled) setListenersReady(true);
+        if (!cancelled) {
+          listenersOkRef.current = true;
+          window.clearTimeout(timeoutId);
+          setListenersReady(true);
+        }
       } catch (e) {
         console.error('[BluetoothPrinterPanel] addListener', e);
         if (!cancelled) {
+          window.clearTimeout(timeoutId);
           setMsg(e instanceof Error ? e.message : 'No se pudo iniciar Bluetooth.');
-          setListenersReady(false);
+          listenersOkRef.current = true;
+          setListenersReady(true);
         }
-        throw e;
       }
     })();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
+      listenersOkRef.current = false;
       setListenersReady(false);
       listenersInitRef.current = null;
       const hs = [...listenerHandlesRef.current];

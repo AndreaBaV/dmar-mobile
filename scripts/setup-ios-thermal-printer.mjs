@@ -1,6 +1,7 @@
 /**
  * 1) Copia el plugin nativo iOS de capacitor-thermal-printer a LocalPackages (SPM no puede depender de node_modules).
  * 2) Parchea ios/App/CapApp-SPM/Package.swift para enlazar ese paquete (cap sync lo regenera sin thermal).
+ * 3) Escribe CapApp-SPM.swift con import + referencia al plugin (si no, el enlazador lo descarta → "not implemented").
  */
 import fs from 'fs';
 import path from 'path';
@@ -18,6 +19,26 @@ const SPM_DEP_LINE =
   '        .package(name: "CapacitorThermalPrinter", path: "../LocalPackages/CapacitorThermalPrinter"),\n';
 const SPM_PRODUCT_LINE =
   '                .product(name: "CapacitorThermalPrinter", package: "CapacitorThermalPrinter"),\n';
+
+const capAppSwiftPath = path.join(root, 'ios', 'App', 'CapApp-SPM', 'Sources', 'CapApp-SPM', 'CapApp-SPM.swift');
+
+const CAP_APP_SPM_SWIFT = `import Foundation
+import CapacitorThermalPrinter
+
+/// Referencia al plugin para que el enlazador incluya el binario SPM. Sin esto, Capacitor responde
+/// "CapacitorThermalPrinter is not implemented on ios" y addListener no completa.
+private enum _ThermalPrinterSPMForceLink {
+    static let once: Bool = {
+        _ = CapacitorThermalPrinterPlugin.self
+        return true
+    }()
+}
+
+public let isCapacitorApp: Bool = {
+    _ = _ThermalPrinterSPMForceLink.once
+    return true
+}()
+`;
 
 function vendorPlugin() {
   if (!fs.existsSync(nmThermal)) {
@@ -65,5 +86,12 @@ function patchCapAppSpm() {
   console.log('[setup-ios-thermal-printer] CapApp-SPM enlazado con CapacitorThermalPrinter (local).');
 }
 
+function writeCapAppSpmForceLinkSwift() {
+  fs.mkdirSync(path.dirname(capAppSwiftPath), { recursive: true });
+  fs.writeFileSync(capAppSwiftPath, CAP_APP_SPM_SWIFT, 'utf8');
+  console.log('[setup-ios-thermal-printer] CapApp-SPM.swift (enlace forzado impresora térmica).');
+}
+
 vendorPlugin();
 patchCapAppSpm();
+writeCapAppSpmForceLinkSwift();
