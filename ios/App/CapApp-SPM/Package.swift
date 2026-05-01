@@ -12,9 +12,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.0.1"),
-        .package(name: "CapacitorCommunityTextToSpeech", path: "..\..\..\node_modules\@capacitor-community\text-to-speech"),
-        .package(name: "CapacitorShare", path: "..\..\..\node_modules\@capacitor\share"),
-        .package(name: "CapgoCapacitorSpeechRecognition", path: "..\..\..\node_modules\@capgo\capacitor-speech-recognition"),
+        .package(name: "CapacitorCommunityTextToSpeech", path: "../../../node_modules/@capacitor-community/text-to-speech"),
+        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
+        .package(name: "CapgoCapacitorSpeechRecognition", path: "../../../node_modules/@capgo/capacitor-speech-recognition"),
         .package(name: "CapacitorThermalPrinter", path: "../LocalPackages/CapacitorThermalPrinter"),
     ],
     targets: [
