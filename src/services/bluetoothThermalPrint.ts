@@ -7,14 +7,13 @@ const LS_ADDR = 'dmar_thermal_printer_address';
 const LS_NAME = 'dmar_thermal_printer_name';
 
 /**
- * Android: Bluetooth clásico (plugin). iOS: mismo paquete JS, nativo enlazado por SPM local
- * (`ios/App/LocalPackages/CapacitorThermalPrinter` + `scripts/setup-ios-thermal-printer.mjs` tras `cap sync`).
- * En iPhone solo impresoras ESC/POS con BLE (CoreBluetooth); no hay SPP Bluetooth clásico.
+ * Soporte solo Android. En iOS la arquitectura oficial es impresión remota
+ * vía laptop-servidor (LAN), no plugin BLE local.
  */
 export function isThermalPrinterSupported(): boolean {
   if (!Capacitor.isNativePlatform()) return false;
   const p = Capacitor.getPlatform();
-  return p === 'android' || p === 'ios';
+  return p === 'android';
 }
 
 export function getSavedPrinter(): { address: string; name: string } | null {

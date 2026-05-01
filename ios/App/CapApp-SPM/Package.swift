@@ -15,7 +15,6 @@ let package = Package(
         .package(name: "CapacitorCommunityTextToSpeech", path: "../../../node_modules/@capacitor-community/text-to-speech"),
         .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
         .package(name: "CapgoCapacitorSpeechRecognition", path: "../../../node_modules/@capgo/capacitor-speech-recognition"),
-        .package(name: "CapacitorThermalPrinter", path: "../LocalPackages/CapacitorThermalPrinter"),
     ],
     targets: [
         .target(
@@ -26,7 +25,6 @@ let package = Package(
                 .product(name: "CapacitorCommunityTextToSpeech", package: "CapacitorCommunityTextToSpeech"),
                 .product(name: "CapacitorShare", package: "CapacitorShare"),
                 .product(name: "CapgoCapacitorSpeechRecognition", package: "CapgoCapacitorSpeechRecognition"),
-                .product(name: "CapacitorThermalPrinter", package: "CapacitorThermalPrinter"),
             ]
         )
     ]

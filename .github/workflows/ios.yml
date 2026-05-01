@@ -31,23 +31,6 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
-      - name: Normalize SPM paths for macOS
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path("ios/App/CapApp-SPM/Package.swift")
-          if p.exists():
-              content = p.read_text(encoding="utf-8")
-              normalized = content.replace("\\\\", "/")
-              if normalized != content:
-                  p.write_text(normalized, encoding="utf-8")
-                  print("Normalized backslashes to forward slashes in CapApp-SPM Package.swift")
-              else:
-                  print("No path normalization needed")
-          else:
-              print("Package.swift not found, skipping normalization")
-          PY
-
       - name: Reempacar p12 con algoritmo compatible
         run: |
           cd ios/certs
