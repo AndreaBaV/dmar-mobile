@@ -1,9 +1,11 @@
 // src/services/pickupOrderService.ts
-import { collection, addDoc, getDocs, updateDoc, doc, getDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, getDoc, query, orderBy, where, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import type { CartItem } from '../types/Cart';
 import { NotificationService } from './notificationService';
 import { clientService } from './clientService';
+import { enqueueOperation, saveLocalPickup } from '../lib/offlineOutbox';
+import type { OutboxOperation } from '../types/SyncContracts';
 
 export type PickupOrderStatus = 'pending' | 'packed' | 'paid' | 'delivered';
 
@@ -27,6 +29,33 @@ export interface PickupOrder extends PickupOrderInput {
 
 export class PickupOrderService {
   private static collectionRef = collection(db, 'onlinePickupOrders');
+  private static createId(prefix: string): string {
+    const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+      : `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    return `${prefix}-${Date.now()}-${random}`;
+  }
+
+  private static buildOutboxOperation(
+    type: OutboxOperation['type'],
+    entityId: string,
+    payload: Record<string, unknown>,
+    idempotencyKey: string
+  ): OutboxOperation {
+    const now = Date.now();
+    return {
+      id: this.createId('op'),
+      type,
+      entityId,
+      payload,
+      idempotencyKey,
+      createdAt: now,
+      updatedAt: now,
+      status: 'pending',
+      retryCount: 0,
+      nextRetryAt: now,
+    };
+  }
 
   static async createOrder(input: PickupOrderInput): Promise<string> {
     if (!input.customerName.trim()) throw new Error('El nombre del cliente es obligatorio.');
@@ -49,8 +78,13 @@ export class PickupOrderService {
     if (input.customerEmail?.trim()) orderData.customerEmail = input.customerEmail.trim();
     if (input.notes?.trim()) orderData.notes = input.notes.trim();
 
-    const docRef = await addDoc(this.collectionRef, orderData);
-    const orderId = docRef.id;
+    const orderId = this.createId('pickup');
+    await setDoc(doc(db, 'onlinePickupOrders', orderId), orderData, { merge: true });
+    const idempotencyKey = this.createId('idem');
+    await saveLocalPickup(orderId, orderData, navigator.onLine ? 'syncing' : 'pending');
+    await enqueueOperation(
+      this.buildOutboxOperation('PICKUP_CREATE', orderId, orderData, idempotencyKey)
+    );
 
     try {
       await clientService.createOrUpdate({
@@ -118,6 +152,14 @@ export class PickupOrderService {
     if (!orderSnap.exists()) throw new Error('Pedido no encontrado');
     const orderData = orderSnap.data() as PickupOrder;
     await updateDoc(orderRef, { status, updatedAt: serverTimestamp() });
+    await enqueueOperation(
+      this.buildOutboxOperation(
+        'PICKUP_UPDATE_STATUS',
+        orderId,
+        { status, updatedAt: Date.now() },
+        this.createId('idem')
+      )
+    );
     try {
       if (status === 'packed') {
         await NotificationService.notifyOrderPacked(orderData.customerName, orderData.customerEmail, orderId, {

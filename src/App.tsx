@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
-import { Share } from '@capacitor/share';
 import { SpeechRecognition as CapacitorSpeechRecognition } from '@capgo/capacitor-speech-recognition';
 import { startNativeSpeechSession, type NativeSpeechSession } from './lib/nativeSpeechSession';
 import { consultarAMar } from './services/marService';
@@ -40,8 +39,6 @@ import {
   stockAvailableFor,
   type CartLine,
 } from './utils/cartUtils';
-import { buildPlainTextTicket } from './lib/ticketText';
-import { tryPrintSaleTicket } from './services/bluetoothThermalPrint';
 import './App.scss';
 
 const MicIcon = () => (
@@ -592,9 +589,8 @@ function App() {
     const cashierName =
       userDisplayName?.trim() || authUser?.email?.split('@')[0] || 'Cajero';
     const cashStr = totalCarrito.toFixed(2);
-    const change = Math.max(0, parseFloat(cashStr) - totalCarrito);
     try {
-      const saleId = await SaleService.processSale(
+      await SaleService.processSale(
         carritoReal,
         totalCarrito,
         'cash',
@@ -606,16 +602,6 @@ function App() {
       );
       mensajeConVoz('Transacción completada exitosamente.');
 
-      const ticketParams = {
-        saleId,
-        lines: [...carritoReal],
-        total: totalCarrito,
-        cashReceived: cashStr,
-        change,
-        cashierName,
-        clientName: 'Cliente Mostrador',
-      };
-
       const finishUi = () => {
         setCarritoReal([]);
         setProcesandoVenta(false);
@@ -623,19 +609,7 @@ function App() {
       };
 
       if (Capacitor.isNativePlatform()) {
-        setTimeout(async () => {
-          const printed = await tryPrintSaleTicket(ticketParams);
-          if (!printed) {
-            try {
-              await Share.share({
-                title: "Ticket D'Mar",
-                text: buildPlainTextTicket(ticketParams),
-                dialogTitle: 'Compartir ticket',
-              });
-            } catch {
-              /* usuario canceló o no hay handler */
-            }
-          }
+        setTimeout(() => {
           finishUi();
         }, 400);
       } else {

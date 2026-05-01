@@ -26,4 +26,5 @@ export interface SaleHistoryRow {
   userName?: string;
   emailSent?: boolean;
   emailSentTo?: string;
+  syncStatus?: 'pending' | 'syncing' | 'synced' | 'failed';
 }

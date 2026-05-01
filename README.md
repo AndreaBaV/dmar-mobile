@@ -16,6 +16,18 @@ Aplicación móvil para operar el **Punto de Venta (POS) de D'Mar Boutique**, co
   - Las escrituras se encolan y luego se sincronizan automáticamente cuando hay conectividad.
 - **Red**: existen utilidades para activar/desactivar red en Firestore (`disableNetwork`/`enableNetwork`).
 
+## Impresion directa via laptop-servidor
+
+- El telefono envia el ticket al servidor local de la laptop por HTTP (`http://<host-laptop>:8765/print-ticket`).
+- La laptop actua como **servidor de impresion** y encola tickets de forma secuencial.
+- El worker de la cola imprime en la impresora USB configurada en la laptop.
+- Si el ticket queda en cola (`status: queued`) la venta permanece con `printStatus: pending` para reintentos.
+
+Configuracion del telefono (LocalStorage):
+
+- `dmar_desktop_host`: IP de la laptop en la red local (ejemplo `192.168.1.50`).
+- `dmar_local_api_token`: token del servidor local (debe coincidir con `DMAR_LOCAL_API_TOKEN` en desktop).
+
 ## Requisitos
 
 - Node.js 18+ y npm

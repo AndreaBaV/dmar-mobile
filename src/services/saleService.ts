@@ -5,13 +5,16 @@
  * @description Maneja el procesamiento de ventas, actualización de stock y puntos de clientes
  */
 
-import { collection, addDoc, doc, getDoc, updateDoc, getDocs, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, getDocs, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { clientService } from './clientService';
 import { ProductService } from './productService';
 import { NotificationService } from './notificationService';
 import type { Variant } from '../types/Product';
 import { normalizeColor, normalizeSize } from '../utils/normalizeFilters';
+import { enqueueOperation, saveLocalSale } from '../lib/offlineOutbox';
+import type { OutboxOperation } from '../types/SyncContracts';
+import { HybridPrintService } from './hybridPrintService';
 
 interface CartItem {
   productId: string;
@@ -53,6 +56,34 @@ interface SaleRecord {
 }
 
 export class SaleService {
+  private static createId(prefix: string): string {
+    const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+      : `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    return `${prefix}-${Date.now()}-${random}`;
+  }
+
+  private static buildOutboxOperation(
+    type: OutboxOperation['type'],
+    entityId: string,
+    payload: Record<string, unknown>,
+    idempotencyKey: string
+  ): OutboxOperation {
+    const now = Date.now();
+    return {
+      id: this.createId('op'),
+      type,
+      entityId,
+      payload,
+      idempotencyKey,
+      createdAt: now,
+      updatedAt: now,
+      status: 'pending',
+      retryCount: 0,
+      nextRetryAt: now,
+    };
+  }
+
   // Función auxiliar para normalizar texto (sin acentos, minúsculas, sin espacios extra)
   private static normalizeText(text: string): string {
     if (!text) return '';
@@ -101,7 +132,10 @@ export class SaleService {
       const productMap = new Map(products.map(p => [p.id, p]));
       const timestamp = isOnline ? serverTimestamp() : Timestamp.now();
       
-      const saleData: SaleRecord = {
+      const saleId = this.createId('sale');
+      const idempotencyKey = this.createId('idem');
+      const ticketId = saleId;
+      const saleData: SaleRecord & Record<string, unknown> = {
         items: cart.map(item => {
           const product = productMap.get(item.productId);
           const itemData: any = {
@@ -145,12 +179,20 @@ export class SaleService {
         userName: userName || 'Usuario',
         printStatus: 'pending', // 'pending', 'printing', 'printed', 'error'
         printTriggeredBy: userName, // Para saber quién lo mandó
-        origin: 'mobile_app' // Para distinguir ventas de mostrador vs móviles
+        origin: 'mobile_app', // Para distinguir ventas de mostrador vs móviles
+        saleId,
+        ticketId,
+        idempotencyKey,
+        syncStatus: 'pending',
             
       };
 
-      const saleDoc = await addDoc(collection(db, 'sales'), saleData);
-      console.log('✅ Venta registrada:', saleDoc.id);
+      await setDoc(doc(db, 'sales', saleId), saleData, { merge: true });
+      console.log('✅ Venta registrada:', saleId);
+      await saveLocalSale(saleId, saleData, navigator.onLine ? 'syncing' : 'pending');
+      await enqueueOperation(
+        this.buildOutboxOperation('SALE_COMMIT', saleId, saleData, idempotencyKey)
+      );
 
       // Actualizar stock
       if (!skipStockUpdate) {
@@ -176,7 +218,7 @@ export class SaleService {
         } catch (stockError) {
           console.error('❌ ERROR en stock:', stockError);
           const errorMsg = stockError instanceof Error ? stockError.message : 'Error desconocido';
-          throw new Error(`Venta registrada pero ERROR en stock: ${errorMsg}\n\nID Venta: ${saleDoc.id}\n\nVerifica el stock manualmente.`);
+          throw new Error(`Venta registrada pero ERROR en stock: ${errorMsg}\n\nID Venta: ${saleId}\n\nVerifica el stock manualmente.`);
         }
       }
       
@@ -190,7 +232,18 @@ export class SaleService {
         }
       }
 
-      return saleDoc.id;
+      await HybridPrintService.printNowOrFallback({
+        saleId,
+        ticketId,
+        cart,
+        total,
+        cashReceived,
+        paymentMethod,
+        userName: userName || 'Usuario',
+        clientName: clientName || 'Cliente Mostrador',
+      });
+
+      return saleId;
     } catch (error) {
       console.error('💥 Error procesando venta:', error);
       throw error;
@@ -228,7 +281,7 @@ export class SaleService {
       console.log(`  Buscando: "${variant.color}" → "${normalizedSearchColor}" / "${variant.size}" → "${normalizedSearchSize}"`);
 
       for (const variantDoc of variantsSnap.docs) {
-        const variantData = variantDoc.data();
+        const variantData = variantDoc.data() as any;
 
         const normalizedDbColor = this.normalizeText(normalizeColor(String(variantData.color || variantData.Color || '')));
         const codeRaw = variantData.colorCode || variantData.hex || variantData.color_hex;
@@ -247,7 +300,7 @@ export class SaleService {
           const sizesSnap = await getDocs(sizesRef);
 
           for (const sizeDoc of sizesSnap.docs) {
-            const sizeData = sizeDoc.data();
+            const sizeData = sizeDoc.data() as any;
             const rawSize = sizeData.size || sizeData.talla || sizeData.Talla || '';
             const normalizedDbSize = this.normalizeText(normalizeSize(String(rawSize)));
 
